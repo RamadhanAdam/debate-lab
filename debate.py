@@ -121,6 +121,7 @@ async def run_round(
     previous_arguments: list,
     include_human: bool,
     on_argument: callable = None,
+    run_warnings: list = None,
 ) -> list:
     """
     Run one round of the debate.
@@ -146,7 +147,7 @@ async def run_round(
         for agent, result in zip(agents, results):
             if isinstance(result, Exception):
                 warning = f"{agent.display_name} failed in round {round_num}: {result}"
-                run_warnings.append(warning)
+                if run_warnings is not None: run_warnings.append(warning)
                 print(f"\n{agent.display_name}: skipped ({result})\n")
                 continue
 
@@ -166,7 +167,7 @@ async def run_round(
                 )
             except Exception as e:
                 warning = f"{agent.display_name} failed in round {round_num}: {e}"
-                run_warnings.append(warning)
+                if run_warnings is not None: run_warnings.append(warning)
                 print(f"{agent.display_name}: skipped ({e})\n")
                 continue
             round_arguments.append((agent.display_name, argument))
@@ -421,6 +422,7 @@ async def run_debate(
                             previous_arguments=all_arguments.copy(),
                             include_human=include_human,
                             on_argument=on_argument,
+            run_warnings=run_warnings,
                         )
 
         all_rounds.append(round_arguments)
@@ -460,6 +462,7 @@ async def run_debate(
         "scores": all_scores,
         "agent_averages": compute_agent_averages(all_scores),
         "summary": moderator_summary,
+        "rounds_data": [[list(entry) for entry in round_args] for round_args in all_rounds],
     }
 
 
