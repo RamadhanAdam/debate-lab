@@ -534,6 +534,8 @@ def run_job(job_id: str, payload: dict, user: dict):
             human_input_hook=human_input_hook,
             user_id=user["user_id"],
             check_interject_hook=check_interject_hook,
+            goal=payload.get("goal"),
+            persona=payload.get("persona"),
         ))
 
         with JOBS_LOCK:

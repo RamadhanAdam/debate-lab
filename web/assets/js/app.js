@@ -18,12 +18,19 @@ createApp({
     const authChecked = ref(false);
     const page = ref("dashboard"); 
     
-    // Theme
+    // Theme & Sidebar
     const theme = ref(localStorage.getItem("dl_theme") || "dark");
+    const sidebarCollapsed = ref(localStorage.getItem("dl_sidebar_collapsed") === "true");
+
     function toggleTheme() {
       theme.value = theme.value === "dark" ? "light" : "dark";
       localStorage.setItem("dl_theme", theme.value);
       document.documentElement.setAttribute("data-theme", theme.value);
+    }
+
+    function toggleSidebarCollapse() {
+      sidebarCollapsed.value = !sidebarCollapsed.value;
+      localStorage.setItem("dl_sidebar_collapsed", sidebarCollapsed.value);
     }
     document.documentElement.setAttribute("data-theme", theme.value);
 
@@ -59,6 +66,7 @@ createApp({
     // Keys
     const keys = ref({ groq: "", google: "", kimi: "", deepseek: "", claude: "" });
     const keysStatus = ref({ groq: null, google: null, kimi: null, deepseek: null, claude: null });
+    const sessionOnlyKeys = ref(localStorage.getItem("dl_session_only") === "true");
 
     // Dashboard & History
     const debates = ref([]);
@@ -70,6 +78,8 @@ createApp({
     // Arena State
     const topic = ref("");
     const mode = ref("review");
+    const goal = ref("rounds");
+    const persona = ref("balanced");
     const rounds = ref(3);
     const selectedAgents = ref(["gpt", "groq", "gemini"]);
     const jobStatus = ref("idle");
@@ -88,6 +98,7 @@ createApp({
     const resultMode = ref("");
     const humanTurn = ref(false);
     const humanInput = ref("");
+    const interjecting = ref(false);
 
     // Inputs
     const inputFiles = ref([]);
@@ -126,25 +137,44 @@ createApp({
     }
 
     function loadLocalKeys() {
-      keys.value.groq = localStorage.getItem("dl_key_groq") || "";
-      keys.value.google = localStorage.getItem("dl_key_google") || "";
-      keys.value.kimi = localStorage.getItem("dl_key_kimi") || "";
-      keys.value.deepseek = localStorage.getItem("dl_key_deepseek") || "";
-      keys.value.claude = localStorage.getItem("dl_key_claude") || "";
+      const storage = sessionOnlyKeys.value ? sessionStorage : localStorage;
+      keys.value.groq = storage.getItem("dl_key_groq") || "";
+      keys.value.google = storage.getItem("dl_key_google") || "";
+      keys.value.kimi = storage.getItem("dl_key_kimi") || "";
+      keys.value.deepseek = storage.getItem("dl_key_deepseek") || "";
+      keys.value.claude = storage.getItem("dl_key_claude") || "";
+      
       profileName.value = localStorage.getItem("dl_name") || "";
       profileAvatarColor.value = localStorage.getItem("dl_color") || "#3fb950";
       onboardDone.value = !!localStorage.getItem("dl_onboard_done");
     }
 
     function saveLocalKeys() {
-      localStorage.setItem("dl_key_groq", keys.value.groq);
-      localStorage.setItem("dl_key_google", keys.value.google);
-      localStorage.setItem("dl_key_kimi", keys.value.kimi);
-      localStorage.setItem("dl_key_deepseek", keys.value.deepseek);
-      localStorage.setItem("dl_key_claude", keys.value.claude);
+      const storage = sessionOnlyKeys.value ? sessionStorage : localStorage;
+      localStorage.setItem("dl_session_only", sessionOnlyKeys.value);
+      
+      storage.setItem("dl_key_groq", keys.value.groq);
+      storage.setItem("dl_key_google", keys.value.google);
+      storage.setItem("dl_key_kimi", keys.value.kimi);
+      storage.setItem("dl_key_deepseek", keys.value.deepseek);
+      storage.setItem("dl_key_claude", keys.value.claude);
+      
       localStorage.setItem("dl_name", profileName.value);
       localStorage.setItem("dl_color", profileAvatarColor.value);
-      addToast("Settings Saved", "Your preferences have been stored locally.", "success");
+      addToast("Settings Saved", "Your preferences have been stored.", "success");
+    }
+
+    function downloadReport(name, content) {
+      const blob = new Blob([content], { type: "text/markdown" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name.endsWith(".md") ? name : `${name}.md`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      addToast("Exported", "Report downloaded successfully", "success");
     }
 
     async function validateKey(provider) {
@@ -251,10 +281,10 @@ createApp({
     const arenaState = {
       selectedAgents, jobMsg, jobStatus, saveDraft, arenaActive, reportSaved,
       transcript, agentScores, warnings, summary, reportContent, currentRound,
-      totalRounds, page, humanTurn, topic, mode, rounds, currentJobId, speakingAgent,
-      humanInput, profileName, loadDashboard, loadReports: loadReportsData, resultMode
+      totalRounds, page, humanTurn, topic, mode, goal, persona, rounds, currentJobId, speakingAgent,
+      humanInput, interjecting, profileName, loadDashboard, loadReports: loadReportsData, resultMode
     };
-    const { runDebate, pollJob, saveReport, submitHuman, updateArenaFromResult } = useArena(arenaState);
+    const { runDebate, pollJob, saveReport, submitHuman, submitInterject, updateArenaFromResult } = useArena(arenaState);
 
     function toggleAgent(id) {
       const idx = selectedAgents.value.indexOf(id);
@@ -343,15 +373,15 @@ createApp({
 
     return {
       user, authChecked, page, theme, toggleTheme,
-      sidebarOpen, toggleSidebar, toasts,
+      sidebarOpen, toggleSidebar, sidebarCollapsed, toggleSidebarCollapse, toasts,
       loginEmail, loginPassword, loginMode, loginLoading, emailSignIn, emailRegister,
       onboardName, onboardAvatarColor, onboardDone, completeOnboarding,
-      profileName, profileAvatarColor, keys, keysStatus, saveLocalKeys, validateKey,
+      profileName, profileAvatarColor, keys, keysStatus, sessionOnlyKeys, saveLocalKeys, validateKey,
       debates, sessions, agentStats, loadingDebates, historySearch,
-      topic, mode, rounds, selectedAgents, toggleAgent,
+      topic, mode, goal, persona, rounds, selectedAgents, toggleAgent,
       jobStatus, jobMsg, currentJobId, arenaActive, configOpen, reportSaved, currentRound, totalRounds,
-      speakingAgent, transcript, agentScores, warnings, summary, resultMode, humanTurn, humanInput,
-      runDebate, saveReport, submitHuman,
+      speakingAgent, transcript, agentScores, warnings, summary, resultMode, humanTurn, humanInput, interjecting,
+      runDebate, saveReport, submitHuman, submitInterject, downloadReport,
       inputFiles, draftContent, deleteInputFileObj, clearAllInputs, uploadFile, cloneUrl, cloneRepo,
       reports, filteredReports, selectedReport, reportContent, reportHtml, loadReport, deleteReport,
       chatMessages, chatInput, chatLoading, sendChat,
@@ -417,14 +447,13 @@ createApp({
       <input v-model="onboardName" type="text" :placeholder="user?.github_username || 'Your name'">
     </div>
     <div class="field">
-      <label>Avatar Color</label>
-      <div class="avatar-options">
-        <div v-for="c in ['#3fb950','#da3633','#388bfd','#ff6b35','#d4a017','#9b59b6']" :key="c"
-             class="avatar-option" :class="{selected: onboardAvatarColor === c}"
-             :style="{background:c}" @click="onboardAvatarColor = c">
-          {{ (onboardName || user?.github_username || 'U').slice(0,2).toUpperCase() }}
+      <label>Your Personal Avatar</label>
+      <div style="display:flex;justify-content:center;margin-bottom:16px">
+        <div class="user-avatar" style="width:80px;height:80px;border-width:3px">
+          <img :src="'https://api.dicebear.com/9.x/glass/svg?seed=' + (onboardName || user?.github_username || 'Researcher')" alt="Avatar">
         </div>
       </div>
+      <p class="muted" style="text-align:center;font-size:12px">Avatar is dynamically generated based on your name.</p>
     </div>
     <button class="btn btn-primary btn-full" @click="completeOnboarding">Complete Setup</button>
   </div>
@@ -433,50 +462,56 @@ createApp({
 <!-- App Shell -->
 <div v-else class="app-shell">
   <div class="overlay" :class="{show: sidebarOpen}" @click="sidebarOpen=false"></div>
-  <aside class="sidebar" :class="{open: sidebarOpen}">
+  <aside class="sidebar" :class="{open: sidebarOpen, collapsed: sidebarCollapsed}">
     <div class="sidebar-brand">
       <div class="mark">DL</div>
-      <div><h1>Debate Lab</h1><p>Multi-model analysis</p></div>
+      <div v-if="!sidebarCollapsed"><h1>Debate Lab</h1><p>Multi-model analysis</p></div>
     </div>
     <nav class="sidebar-nav">
       <button class="btn btn-ghost nav-item" :class="{active: page==='dashboard'}" @click="page='dashboard'; sidebarOpen=false">
         <svg><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
-        <span class="nav-label">Dashboard</span>
+        <span v-if="!sidebarCollapsed" class="nav-label">Dashboard</span>
       </button>
       <button class="btn btn-ghost nav-item" :class="{active: page==='arena'}" @click="goToArena">
         <svg><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="18" x2="12" y2="12"></line><line x1="9" y1="15" x2="15" y2="15"></line></svg>
-        <span class="nav-label">New Debate</span>
+        <span v-if="!sidebarCollapsed" class="nav-label">New Debate</span>
       </button>
       <button class="btn btn-ghost nav-item" :class="{active: page==='history'}" @click="page='history'; sidebarOpen=false">
         <svg><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
-        <span class="nav-label">History</span>
+        <span v-if="!sidebarCollapsed" class="nav-label">History</span>
       </button>
       <div style="height:1px;background:var(--glass-border);margin:8px 12px"></div>
-      <div class="nav-label muted" style="padding:0 12px;font-size:11px;font-weight:700;margin-top:8px">RECENT</div>
+      <div v-if="!sidebarCollapsed" class="nav-label muted" style="padding:0 12px;font-size:11px;font-weight:700;margin-top:8px">RECENT</div>
       <div v-for="s in sessions.slice(0,5)" :key="s.id" @click="goToHistory(s)"
-           class="btn btn-ghost nav-item" style="font-size:12px;padding:8px 12px;font-weight:400">
-        <span class="nav-label" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.topic || 'Untitled' }}</span>
+           class="btn btn-ghost nav-item" style="font-size:12px;padding:8px 12px;font-weight:400" :title="s.topic">
+        <svg v-if="sidebarCollapsed"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+        <span v-if="!sidebarCollapsed" class="nav-label" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.topic || 'Untitled' }}</span>
       </div>
       <div style="flex:1"></div>
       <button class="btn btn-ghost nav-item" :class="{active: page==='settings'}" @click="page='settings'; sidebarOpen=false">
         <svg><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
-        <span class="nav-label">Settings</span>
+        <span v-if="!sidebarCollapsed" class="nav-label">Settings</span>
       </button>
       <button class="btn btn-ghost nav-item" @click="toggleTheme">
         <svg v-if="theme==='dark'"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
         <svg v-else><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
-        <span class="nav-label">Theme</span>
+        <span v-if="!sidebarCollapsed" class="nav-label">Theme</span>
       </button>
       <button class="btn btn-ghost nav-item" :class="{active: page==='help'}" @click="page='help'; sidebarOpen=false">
         <svg><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-        <span class="nav-label">Help</span>
+        <span v-if="!sidebarCollapsed" class="nav-label">Resources</span>
+      </button>
+      <button class="btn btn-ghost nav-item" @click="toggleSidebarCollapse" style="margin-top:8px">
+        <svg v-if="!sidebarCollapsed"><polyline points="11 17 6 12 11 7"></polyline><polyline points="18 17 13 12 18 7"></polyline></svg>
+        <svg v-else><polyline points="13 17 18 12 13 7"></polyline><polyline points="6 17 11 12 6 7"></polyline></svg>
+        <span v-if="!sidebarCollapsed" class="nav-label">Collapse</span>
       </button>
     </nav>
     <div class="sidebar-user">
-      <div class="user-avatar" :style="{background: profileAvatarColor, borderColor: profileAvatarColor, color: '#fff'}">
-        {{ (profileName || user?.github_username || 'U').slice(0,2).toUpperCase() }}
+      <div class="user-avatar" :style="{borderColor: profileAvatarColor}">
+        <img :src="'https://api.dicebear.com/9.x/glass/svg?seed=' + (profileName || user?.github_username || 'Researcher')" alt="User">
       </div>
-      <span class="user-name">{{ profileName || user?.github_username }}</span>
+      <span v-if="!sidebarCollapsed" class="user-name">{{ profileName || user?.github_username }}</span>
     </div>
   </aside>
 
@@ -623,6 +658,10 @@ createApp({
                   <svg><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                   Moderator Summary
                 </h2>
+                <button class="btn btn-secondary btn-sm" @click="downloadReport(topic || 'Report', reportContent)">
+                  <svg><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                  Export MD
+                </button>
               </div>
               <div v-html="marked.parse(summary)" style="font-size:14px;line-height:1.6"></div>
             </div>
@@ -660,6 +699,27 @@ createApp({
               <option value="business">Business</option>
               <option value="creative">Creative</option>
               <option value="technical">Technical</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Goal</label>
+            <select v-model="goal">
+              <option value="rounds">Fixed Rounds</option>
+              <option value="consensus">Consensus</option>
+              <option value="flaws">Identify Flaws</option>
+              <option value="brainstorm">Brainstorm</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 80px;gap:12px">
+          <div class="field">
+            <label>Stance/Persona</label>
+            <select v-model="persona">
+              <option value="balanced">Balanced</option>
+              <option value="skeptic">Skeptic</option>
+              <option value="optimist">Optimist</option>
+              <option value="compliance">Compliance</option>
             </select>
           </div>
           <div class="field">
@@ -732,7 +792,10 @@ createApp({
 
       <div v-if="selectedReport && reportContent" class="panel" style="margin-bottom:24px">
         <div class="panel-head">
-          <h2>{{ selectedReport }}</h2>
+          <div style="display:flex;align-items:center;gap:12px">
+            <h2>{{ selectedReport }}</h2>
+            <button class="btn btn-secondary btn-sm" @click="downloadReport(selectedReport, reportContent)">Export</button>
+          </div>
           <button class="btn btn-ghost btn-sm" @click="selectedReport=null; reportContent=''">✕ Close</button>
         </div>
         <div class="report-view" v-html="reportHtml" style="font-size:14px;line-height:1.6;max-height:50vh;overflow-y:auto;padding-right:12px"></div>
@@ -801,16 +864,25 @@ createApp({
               <div v-for="c in ['#3fb950','#da3633','#388bfd','#ff6b35','#4d9fff','#cc785c','#d4a017','#9b59b6']" :key="c"
                    class="avatar-option" :class="{selected: profileAvatarColor === c}"
                    :style="{background:c}" @click="profileAvatarColor = c; saveLocalKeys()">
-                {{ (profileName || user?.github_username || 'U').slice(0,2).toUpperCase() }}
+                <img :src="'https://api.dicebear.com/9.x/glass/svg?seed=' + (profileName || user?.github_username || 'Researcher')" alt="Avatar" style="width:100%;border-radius:50%">
               </div>
             </div>
           </div>
         </div>
 
         <div class="panel">
-          <div class="panel-head"><h2>API Keys</h2></div>
-          <p style="font-size:13px;color:var(--ink2);margin-bottom:20px">Keys are stored locally in your browser.</p>
+          <div class="panel-head"><h2>API Key Security</h2></div>
+          <div class="field">
+             <label class="check-item" style="flex-direction:row-reverse;justify-content:flex-end;gap:12px">
+                <span>Only keep keys for this session (more secure)</span>
+                <input type="checkbox" v-model="sessionOnlyKeys" @change="saveLocalKeys">
+             </label>
+             <p class="muted" style="font-size:12px;margin-top:8px">If enabled, keys will be deleted as soon as you close your browser tab.</p>
+          </div>
           
+          <div style="height:1px;background:var(--glass-border);margin:20px 0"></div>
+
+          <div class="panel-head"><h2>API Keys</h2></div>
           <div v-for="provider in ['groq', 'google', 'kimi', 'deepseek', 'claude']" :key="provider" class="field" style="padding-bottom:16px;border-bottom:1px solid var(--glass-border)">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
               <label style="text-transform:capitalize">{{ provider }} API Key</label>
@@ -828,8 +900,8 @@ createApp({
         <div class="panel">
           <div class="panel-head"><h2>Account</h2></div>
           <div style="display:flex;align-items:center;gap:16px">
-            <div class="user-avatar" :style="{background: profileAvatarColor, width:'64px', height:'64px', fontSize:'24px'}">
-               {{ (profileName || user?.github_username || 'U').slice(0,2).toUpperCase() }}
+            <div class="user-avatar" :style="{borderColor: profileAvatarColor, width:'64px', height:'64px'}">
+               <img :src="'https://api.dicebear.com/9.x/glass/svg?seed=' + (profileName || user?.github_username || 'Researcher')" alt="User">
             </div>
             <div>
               <div style="font-weight:700;font-size:16px">{{ user?.github_username }}</div>
@@ -841,34 +913,75 @@ createApp({
       </div>
     </div>
     
-    <!-- Help Page -->
+    <!-- Resources Hub -->
     <div v-if="page === 'help'" class="page">
-      <h1 style="font-size:28px;font-weight:800;margin-bottom:8px">Help & Documentation</h1>
-      <p style="color:var(--ink2);margin-bottom:32px">Learn how to use Debate Lab effectively.</p>
+      <h1 style="font-size:28px;font-weight:800;margin-bottom:8px">Resources & Documentation</h1>
+      <p style="color:var(--ink2);margin-bottom:32px">Master the art of multi-model analysis.</p>
       
       <div class="settings-grid">
         <div class="panel">
           <h2>Getting Started</h2>
-          <ol style="margin-top:16px;padding-left:20px;display:flex;flex-direction:column;gap:12px;font-size:14px;line-height:1.6">
-            <li><strong>Add your API keys</strong> in Settings. You need at least one to run a debate.</li>
-            <li><strong>Upload input files</strong> in the Arena. This is the context the agents will read.</li>
-            <li><strong>Configure the debate</strong> by selecting agents, rounds, and mode.</li>
-            <li><strong>Click Run</strong> and watch the agents analyze your work.</li>
-          </ol>
+          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:20px;margin-top:20px">
+            <div class="stat-card" style="padding:20px">
+                <div class="stat-value" style="font-size:20px">01.</div>
+                <div class="stat-label">Add your API keys in Settings. You need at least one (Groq/Gemini/Copilot) to run a debate.</div>
+            </div>
+            <div class="stat-card" style="padding:20px">
+                <div class="stat-value" style="font-size:20px">02.</div>
+                <div class="stat-label">Upload your input files or clone a repo in the Arena. This provides the context for analysis.</div>
+            </div>
+            <div class="stat-card" style="padding:20px">
+                <div class="stat-value" style="font-size:20px">03.</div>
+                <div class="stat-label">Configure the Goal and Personas, click Run, and watch the agents tear your work apart.</div>
+            </div>
+          </div>
         </div>
         
         <div class="panel">
-          <h2>How it Works</h2>
-          <p style="margin-top:16px;font-size:14px;line-height:1.6">
-            Debate Lab uses multiple large language models to peer-review your work. In Round 1, they provide independent assessments. In Round 2, they read each other's assessments and argue. In Round 3, they provide final actionable recommendations. 
-            <br><br>
-            A reinforcement learning (Q-Learning) system tracks which agents produce the best arguments and prioritizes them in future debates.
+          <h2>Prompt Library (Topic Examples)</h2>
+          <div style="display:grid;gap:12px;margin-top:16px">
+            <div class="debate-card" style="cursor:default" @click="topic='Review the security and scalability of this codebase. Find at least 3 critical vulnerabilities.'">
+                <div class="debate-card-body">
+                    <div class="debate-card-topic">🛡️ Security Auditor</div>
+                    <div class="debate-card-meta">"Review the security and scalability of this codebase. Find at least 3 critical vulnerabilities."</div>
+                </div>
+            </div>
+            <div class="debate-card" style="cursor:default" @click="topic='Critique this business plan from a VC perspective. Be harsh about the unit economics and market fit.'">
+                <div class="debate-card-body">
+                    <div class="debate-card-topic">💰 VC Pitch Roaster</div>
+                    <div class="debate-card-meta">"Critique this business plan from a VC perspective. Be harsh about the unit economics and market fit."</div>
+                </div>
+            </div>
+            <div class="debate-card" style="cursor:default" @click="topic='Summarize the key findings of this paper and identify any data that contradicts the authors conclusion.'">
+                <div class="debate-card-body">
+                    <div class="debate-card-topic">🔬 Academic Peer Review</div>
+                    <div class="debate-card-meta">"Summarize the key findings of this paper and identify any data that contradicts the authors conclusion."</div>
+                </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>System Architecture</h2>
+          <div style="margin-top:20px;background:rgba(0,0,0,0.2);padding:20px;border-radius:12px;font-family:monospace;font-size:12px;white-space:pre;overflow-x:auto">
+[Your Browser] --- (Encrypted Keys) ---> [FastAPI Server]
+      |                                     |
+      | (Polling)                           | (Orchestration)
+      v                                     v
+[UI Progress] <--- (Job Stats) --- [Agents Loop (RL Sorted)]
+                                            |
+                                  +---------+---------+
+                                  |         |         |
+                               [GPT]    [Claude]   [Llama]
+          </div>
+          <p style="margin-top:16px;font-size:14px;line-height:1.6;color:var(--ink2)">
+            Debate Lab uses a Reinforcement Learning (RL) engine to track which models produce the most logically sound and specific arguments. Over time, the best models are automatically moved to the "Rebuttal" phase of the debate to provide the highest quality counters.
           </p>
         </div>
       </div>
     </div>
 
   </main>
-  </div>
+</div>
   `
-  }).mount("#app");
+}).mount("#app");

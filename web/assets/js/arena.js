@@ -27,12 +27,14 @@ export function useArena(state) {
     state.humanTurn.value = false;
     state.interjecting.value = false;
 
-    try {
+    try:
       const data = await runDebateReq({
         topic: state.topic.value || null,
         mode: state.mode.value,
         rounds: state.rounds.value,
         agents: state.selectedAgents.value,
+        goal: state.goal.value,
+        persona: state.persona.value,
       });
       state.currentJobId.value = data.job_id;
       pollJob(data.job_id);

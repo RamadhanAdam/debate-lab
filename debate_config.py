@@ -45,6 +45,20 @@ TIME_LIMIT = 60  # Time limit per turn in seconds
 MODES = ["review", "debate", "business", "creative", "technical"]  # Available modes of operation
 DEFAULT_MODE = "review"  
 
+GOALS = {
+    "rounds": "Complete the fixed number of rounds.",
+    "consensus": "Debate until a unanimous consensus is reached on the core issues.",
+    "flaws": "Identify and agree upon exactly 3-5 critical flaws in the input.",
+    "brainstorm": "Generate as many unique, viable alternative solutions as possible."
+}
+
+PERSONAS = {
+    "balanced": "You are a balanced, objective analyst.",
+    "skeptic": "You are a harsh skeptic. You look for holes, edge cases, and worst-case scenarios.",
+    "optimist": "You are an optimist. You look for the best potential, scalability, and positive impact.",
+    "compliance": "You are a strict compliance and legal officer. You focus on rules, risks, and standards."
+}
+
 
 # Q-Learning settings
 LEARNING_RATE = 0.1 # How fast the Q-values are updated after each debate

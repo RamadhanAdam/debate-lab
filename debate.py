@@ -134,6 +134,8 @@ async def run_round(
     run_warnings: list = None,
     human_input_hook: callable = None,
     check_interject_hook: callable = None,
+    goal: str = None,
+    persona: str = None,
 ) -> list:
     """
     Run one round of the debate.
@@ -154,7 +156,7 @@ async def run_round(
         # Round 1: all agents argue at the same time
         print("All agents arguing simultaneously...\n")
         tasks = [
-            agent.argue(topic, context, round_num, mode, previous_arguments)
+            agent.argue(topic, context, round_num, mode, previous_arguments, goal=goal, persona=persona)
             for agent in ordered_agents
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -189,7 +191,7 @@ async def run_round(
             print(f"\n{agent.display_name} is arguing...\n")
             try:
                 argument = await agent.argue(
-                    topic, context, round_num, mode, previous_arguments
+                    topic, context, round_num, mode, previous_arguments, goal=goal, persona=persona
                 )
             except Exception as e:
                 warning = f"{agent.display_name} failed in round {round_num}: {e}"
@@ -450,20 +452,22 @@ async def run_debate(
     all_arguments = []
     all_scores = []
     run_warnings = []
-
-    for round_num in range(1, rounds + 1):
-        round_arguments = await run_round(
-                            agents=agents,
-                            topic=topic,
-                            context=context,
-                            round_num=round_num,
-                            mode=mode,
-                            previous_arguments=all_arguments.copy(),
-                            include_human=include_human,
-                            on_argument=on_argument,
-            run_warnings=run_warnings,
-            human_input_hook=human_input_hook,
-                        )
+for round_num in range(1, rounds + 1):
+    round_arguments = await run_round(
+                        agents=agents,
+                        topic=topic,
+                        context=context,
+                        round_num=round_num,
+                        mode=mode,
+                        previous_arguments=all_arguments.copy(),
+                        include_human=include_human,
+                        on_argument=on_argument,
+        run_warnings=run_warnings,
+        human_input_hook=human_input_hook,
+        check_interject_hook=check_interject_hook,
+        goal=goal,
+        persona=persona,
+                    )
 
         all_rounds.append(round_arguments)
 

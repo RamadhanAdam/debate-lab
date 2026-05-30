@@ -52,38 +52,47 @@ class BaseAgent(ABC):
     def add_to_history(self, argument: str):
         self.history.append(argument)
 
-    def build_prompt(self, topic: str, context: str, round_num: int, mode: str, other_arguments: list) -> str:
+    def build_prompt(self, topic: str, context: str, round_num: int, mode: str, other_arguments: list, goal: str = None, persona: str = None) -> str:
         if len(context) > 12000:
             context = context[:6000] + "\n\n...[truncated]...\n\n" + context[-6000:]
+
+        persona_instr = persona if persona else "You are a rigorous analyst."
+        goal_instr = f"DEBATE GOAL: {goal}" if goal else ""
 
         if round_num == 1:
             if mode == "review":
                 instruction = (
-                    "You are a rigorous analyst and expert peer reviewer. "
+                    f"{persona_instr} "
                     "Read the provided files carefully and give your independent critical assessment. "
                     "Cite specific evidence from the files, identify unjustified assumptions, and be precise."
+                    f"\n{goal_instr}"
                 )
             else:
                 instruction = (
-                    "You are a rigorous analyst and debater. "
+                    f"{persona_instr} "
                     "Take a strong position on the topic and argue it clearly. "
                     "Cite specific evidence from the provided files, identify unjustified assumptions, and be precise."
+                    f"\n{goal_instr}"
                 )
 
         elif round_num == 2:
             others = "\n\n".join([f"{name}:\n{arg}" for name, arg in other_arguments])
             instruction = (
+                f"{persona_instr} "
                 f"You have read the files and made your initial assessment. "
                 f"Now read what the other reviewers said and directly respond to each other agent by name.\n\n"
                 f"Other reviewers said:\n{others}\n\n"
                 f"Quote their words, agree or disagree with specific points, and provide your counter-arguments."
+                f"\n{goal_instr}"
             )
 
         else:
             instruction = (
+                f"{persona_instr} "
                 "This is your final argument. "
                 "Synthesize everything that has been said across all rounds. "
                 "Provide the 3 most important actionable recommendations, state what to do first, and be direct and concise."
+                f"\n{goal_instr}"
             )
 
         prompt = f"""
