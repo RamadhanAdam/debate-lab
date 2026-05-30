@@ -1,50 +1,407 @@
+# web_app.py
+# FastAPI web server with GitHub OAuth, Supabase database, and per-user data.
+
 import asyncio
 import json
 import mimetypes
+import os
+import secrets
 import threading
 import uuid
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse
+
+import httpx
+from fastapi import FastAPI, Request, Response, HTTPException
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
+from jose import jwt
+from supabase import create_client, Client
 
 from debate import run_debate, list_input_files
-from debate_config import AGENTS, DEBATES_DIR, INPUT_DIR, MODES, ROUNDS
+from debate_config import (
+    AGENTS,
+    DEBATES_DIR,
+    INPUT_DIR,
+    MODES,
+    ROUNDS,
+)
+
+
+# CONFIG
 
 
 ROOT = Path(__file__).parent
 WEB_DIR = ROOT / "web"
+
+SUPABASE_URL = os.environ["SUPABASE_URL"]
+SUPABASE_SERVICE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
+SUPABASE_ANON_KEY = os.environ["SUPABASE_ANON_KEY"]
+
+GITHUB_CLIENT_ID = os.environ["GITHUB_CLIENT_ID"]
+GITHUB_CLIENT_SECRET = os.environ["GITHUB_CLIENT_SECRET"]
+SESSION_SECRET = os.environ["SESSION_SECRET"]
+
+GITHUB_AUTHORIZE_URL = "https://github.com/login/oauth/authorize"
+GITHUB_TOKEN_URL = "https://github.com/login/oauth/access_token"
+GITHUB_USER_URL = "https://api.github.com/user"
+
+
+# SUPABASE CLIENT
+
+
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+
+
+# APP
+
+
+app = FastAPI()
+app.mount("/assets", StaticFiles(directory=str(WEB_DIR / "assets")), name="assets")
+
+
+# JOBS
+
+
 JOBS = {}
 JOBS_LOCK = threading.Lock()
 
 
-def json_response(handler, payload, status=200):
-    body = json.dumps(payload, indent=2).encode("utf-8")
-    handler.send_response(status)
-    handler.send_header("Content-Type", "application/json; charset=utf-8")
-    handler.send_header("Content-Length", str(len(body)))
-    handler.end_headers()
-    handler.wfile.write(body)
+# SESSION HELPERS
 
 
-def text_response(handler, payload, status=200, content_type="text/plain; charset=utf-8"):
-    body = payload.encode("utf-8")
-    handler.send_response(status)
-    handler.send_header("Content-Type", content_type)
-    handler.send_header("Content-Length", str(len(body)))
-    handler.end_headers()
-    handler.wfile.write(body)
+def create_session_token(user_id: str, github_username: str) -> str:
+    # Create a signed JWT session token
+    payload = {
+        "user_id": user_id,
+        "github_username": github_username,
+    }
+    return jwt.encode(payload, SESSION_SECRET, algorithm="HS256")
+
+def get_current_user(request: Request) -> dict | None:
+    # Read and verify the session token from the cookie
+    token = request.cookies.get("session")
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(token, SESSION_SECRET, algorithms=["HS256"])
+        return payload
+    except Exception:
+        return None
+
+def require_user(request: Request) -> dict:
+    user = get_current_user(request)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return user
 
 
-def safe_input_path(relative_path):
-    target = (INPUT_DIR / relative_path).resolve()
-    if INPUT_DIR.resolve() not in target.parents and target != INPUT_DIR.resolve():
-        raise ValueError("Invalid input path.")
-    return target
+# AUTH ROUTES
 
 
-def run_job(job_id, payload):
+@app.get("/auth/login")
+async def auth_login(request: Request):
+    # Generate a random state to prevent CSRF
+    state = secrets.token_urlsafe(16)
+    params = urlencode({
+        "client_id": GITHUB_CLIENT_ID,
+        "scope": "read:user user:email",
+        "state": state,
+    })
+    response = RedirectResponse(f"{GITHUB_AUTHORIZE_URL}?{params}")
+    # Store state in cookie for verification
+    response.set_cookie("oauth_state", state, httponly=True, max_age=600)
+    return response
+
+@app.get("/auth/callback")
+async def auth_callback(request: Request, code: str, state: str):
+    # Verify state matches what we set
+    stored_state = request.cookies.get("oauth_state")
+    if not stored_state or stored_state != state:
+        raise HTTPException(status_code=400, detail="Invalid OAuth state")
+
+    # Exchange code for GitHub access token
+    async with httpx.AsyncClient() as client:
+        token_response = await client.post(
+            GITHUB_TOKEN_URL,
+            data={
+                "client_id": GITHUB_CLIENT_ID,
+                "client_secret": GITHUB_CLIENT_SECRET,
+                "code": code,
+            },
+            headers={"Accept": "application/json"},
+        )
+        token_data = token_response.json()
+        access_token = token_data.get("access_token")
+
+        if not access_token:
+            raise HTTPException(status_code=400, detail="Failed to get GitHub token")
+
+        # Get GitHub user info
+        user_response = await client.get(
+            GITHUB_USER_URL,
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Accept": "application/json",
+            },
+        )
+        github_user = user_response.json()
+
+    github_id = str(github_user["id"])
+    github_username = github_user["login"]
+    github_avatar = github_user.get("avatar_url", "")
+
+    # Check if user exists in Supabase, create if not
+    existing = supabase.table("profiles").select("id").eq("github_username", github_username).execute()
+
+    if existing.data:
+        user_id = existing.data[0]["id"]
+    else:
+        # Create new user in Supabase auth
+        new_user = supabase.auth.admin.create_user({
+            "email": f"{github_username}@github.debate-lab",
+            "password": secrets.token_urlsafe(32),
+            "email_confirm": True,
+        })
+        user_id = new_user.user.id
+
+        # Create profile
+        supabase.table("profiles").insert({
+            "id": user_id,
+            "github_username": github_username,
+            "github_avatar": github_avatar,
+        }).execute()
+
+    # Create session token and redirect to app
+    session_token = create_session_token(user_id, github_username)
+    response = RedirectResponse("/")
+    response.set_cookie(
+        "session",
+        session_token,
+        httponly=True,
+        max_age=60 * 60 * 24 * 7,  # 7 days
+        samesite="lax",
+    )
+    response.delete_cookie("oauth_state")
+    return response
+
+@app.get("/auth/logout")
+async def auth_logout():
+    response = RedirectResponse("/")
+    response.delete_cookie("session")
+    return response
+
+@app.get("/auth/me")
+async def auth_me(request: Request):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"authenticated": False})
+    return JSONResponse({"authenticated": True, **user})
+
+@app.post("/auth/register")
+async def auth_register(request: Request):
+    payload = await request.json()
+    email = payload.get("email")
+    password = payload.get("password")
+    if not email or not password:
+        raise HTTPException(status_code=400, detail="Email and password required")
+    try:
+        result = supabase.auth.sign_up({"email": email, "password": password})
+        return {"ok": True, "message": "Check your email to confirm your account"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.post("/auth/signin")
+async def auth_signin(request: Request):
+    payload = await request.json()
+    email = payload.get("email")
+    password = payload.get("password")
+    if not email or not password:
+        raise HTTPException(status_code=400, detail="Email and password required")
+    try:
+        result = supabase.auth.sign_in_with_password({"email": email, "password": password})
+        user_id = result.user.id
+        username = result.user.email.split("@")[0]
+        existing = supabase.table("profiles").select("id").eq("id", user_id).execute()
+        if not existing.data:
+            supabase.table("profiles").insert({
+                "id": user_id,
+                "github_username": username,
+                "github_avatar": "",
+            }).execute()
+        session_token = create_session_token(user_id, username)
+        response = JSONResponse({"ok": True})
+        response.set_cookie(
+            "session",
+            session_token,
+            httponly=True,
+            max_age=60*60*24*7,
+            samesite="lax",
+        )
+        return response
+    except Exception as e:
+        print(f"Sign in error: {e}")
+        raise HTTPException(status_code=401, detail="Invalid email or password")   
+
+# STATIC ROUTES
+
+
+@app.get("/")
+async def index(request: Request):
+    return FileResponse(WEB_DIR / "index.html")
+
+
+# API ROUTES
+
+
+@app.get("/api/status")
+async def api_status(request: Request):
+    user = require_user(request)
+    return {
+        "agents": [
+            {"id": key, "name": value}
+            for key, value in AGENTS.items()
+            if key != "human"
+        ],
+        "modes": MODES,
+        "default_rounds": ROUNDS,
+        "input_files": list_input_files(),
+        "user": user,
+    }
+
+@app.get("/api/inputs")
+async def api_inputs(request: Request):
+    require_user(request)
+    return {"files": list_input_files()}
+
+@app.post("/api/input")
+async def api_write_input(request: Request):
+    require_user(request)
+    payload = await request.json()
+    name = payload.get("name") or "web_input.md"
+    content = payload.get("content") or ""
+    target = (INPUT_DIR / name).resolve()
+    if INPUT_DIR.resolve() not in target.parents:
+        raise HTTPException(status_code=400, detail="Invalid path")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(content, encoding="utf-8")
+    return {
+        "ok": True,
+        "file": {
+            "path": str(target.relative_to(INPUT_DIR)),
+            "size": target.stat().st_size,
+        },
+    }
+
+@app.delete("/api/input")
+async def api_delete_input(request: Request):
+    require_user(request)
+    payload = await request.json()
+    name = payload.get("name")
+    if not name:
+        raise HTTPException(status_code=400, detail="No file name provided")
+    target = (INPUT_DIR / name).resolve()
+    if INPUT_DIR.resolve() not in target.parents:
+        raise HTTPException(status_code=400, detail="Invalid path")
+    if not target.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    target.unlink()
+    return {"ok": True}
+
+@app.get("/api/reports")
+async def api_reports(request: Request):
+    user = require_user(request)
+    # Get debates from Supabase for this user
+    result = supabase.table("debates").select("*").eq("user_id", user["user_id"]).order("created_at", desc=True).execute()
+    reports = []
+    for debate in result.data:
+        artifact = Path(debate["artifact_path"]) if debate.get("artifact_path") else None
+        reports.append({
+            "name": artifact.name if artifact else debate["id"],
+            "id": debate["id"],
+            "topic": debate["topic"],
+            "mode": debate["mode"],
+            "created_at": debate["created_at"],
+            "summary": debate["summary"],
+        })
+    return {"reports": reports}
+
+@app.get("/api/report")
+async def api_report(request: Request, name: str):
+    require_user(request)
+    target = (DEBATES_DIR / name).resolve()
+    if DEBATES_DIR.resolve() not in target.parents or not target.exists():
+        raise HTTPException(status_code=404, detail="Report not found")
+    return {
+        "name": target.name,
+        "content": target.read_text(encoding="utf-8"),
+    }
+
+@app.delete("/api/report")
+async def api_delete_report(request: Request):
+    user = require_user(request)
+    payload = await request.json()
+    name = payload.get("name")
+    if not name:
+        raise HTTPException(status_code=400, detail="No report name provided")
+
+    # Delete from Supabase
+    supabase.table("debates").delete().eq("user_id", user["user_id"]).eq("artifact_path", str(DEBATES_DIR / name)).execute()
+
+    # Delete file
+    target = (DEBATES_DIR / name).resolve()
+    if target.exists():
+        target.unlink()
+    return {"ok": True}
+
+@app.get("/api/jobs/{job_id}")
+async def api_job(job_id: str, request: Request):
+    require_user(request)
+    with JOBS_LOCK:
+        job = JOBS.get(job_id)
+        if job:
+            job = dict(job)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
+
+@app.post("/api/run")
+async def api_run(request: Request):
+    user = require_user(request)
+    payload = await request.json()
+    job_id = str(uuid.uuid4())
+
+    with JOBS_LOCK:
+        JOBS[job_id] = {
+            "id": job_id,
+            "status": "queued",
+            "result": None,
+            "error": None,
+        }
+
+    thread = threading.Thread(
+        target=run_job,
+        args=(job_id, payload, user),
+        daemon=True,
+    )
+    thread.start()
+    return {"job_id": job_id}
+
+
+# JOB RUNNER
+
+
+def run_job(job_id: str, payload: dict, user: dict):
     with JOBS_LOCK:
         JOBS[job_id]["status"] = "running"
+        JOBS[job_id]["transcript"] = []
+
+    def on_argument(agent_name, argument):
+        with JOBS_LOCK:
+            JOBS[job_id]["transcript"].append({
+                "agent": agent_name,
+                "text": argument,
+            })
 
     try:
         selected_agents = payload.get("agents") or ["groq"]
@@ -54,7 +411,21 @@ def run_job(job_id, payload):
             include_human=False,
             selected_agents=selected_agents,
             rounds=int(payload.get("rounds") or ROUNDS),
+            on_argument=on_argument,
         ))
+
+        supabase.table("debates").insert({
+            "user_id": user["user_id"],
+            "topic": result["topic"],
+            "mode": result["mode"],
+            "rounds": result["rounds"],
+            "agents": result["agents"],
+            "artifact_path": result["artifact_path"],
+            "summary": result["summary"],
+            "warnings": result["warnings"],
+            "agent_averages": result["agent_averages"],
+        }).execute()
+
         with JOBS_LOCK:
             JOBS[job_id].update({
                 "status": "completed",
@@ -66,153 +437,75 @@ def run_job(job_id, payload):
                 "status": "failed",
                 "error": str(exc),
             })
+            
+
+@app.post("/api/repo/clone")
+async def api_clone_repo(request: Request):
+    require_user(request)
+    payload = await request.json()
+    url = payload.get("url", "").strip()
+    if not url:
+        raise HTTPException(status_code=400, detail="No URL provided")
+
+    import subprocess, shutil, tempfile
+
+    # Clone into a temp dir then copy supported files to input/
+    supported = {".txt", ".md", ".py", ".ts", ".js", ".json", ".csv"}
+    with tempfile.TemporaryDirectory() as tmp:
+        result = subprocess.run(
+            ["git", "clone", "--depth=1", url, tmp],
+            capture_output=True, text=True, timeout=60
+        )
+        if result.returncode != 0:
+            raise HTTPException(status_code=400, detail=f"Clone failed: {result.stderr[:200]}")
+
+        copied = 0
+        for src in Path(tmp).rglob("*"):
+            if src.is_file() and src.suffix in supported and ".git" not in src.parts:
+                rel = src.relative_to(tmp)
+                dest = INPUT_DIR / rel
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dest)
+                copied += 1
+
+    return {"ok": True, "files_copied": copied}
 
 
-class DebateWebHandler(BaseHTTPRequestHandler):
-    server_version = "DebateWeb/1.0"
+@app.post("/api/chat")
+async def api_chat(request: Request):
+    require_user(request)
+    payload = await request.json()
+    message = payload.get("message", "")
+    context = payload.get("context", "")[:4000]
+    history = payload.get("history", [])
+    groq_key = payload.get("groq_key") or os.environ.get("GROQ_API_KEY", "")
 
-    def log_message(self, format, *args):
-        return
+    if not groq_key:
+        raise HTTPException(status_code=400, detail="Groq API key required for chat")
 
-    def do_GET(self):
-        parsed = urlparse(self.path)
-        path = parsed.path
+    from groq import Groq
+    client = Groq(api_key=groq_key, timeout=30, max_retries=0)
 
-        if path == "/":
-            self.serve_static("index.html")
-        elif path.startswith("/assets/"):
-            self.serve_static(path.removeprefix("/"))
-        elif path == "/api/status":
-            self.handle_status()
-        elif path == "/api/inputs":
-            json_response(self, {"files": list_input_files()})
-        elif path == "/api/reports":
-            self.handle_reports()
-        elif path == "/api/report":
-            self.handle_report(parse_qs(parsed.query))
-        elif path.startswith("/api/jobs/"):
-            self.handle_job(path.rsplit("/", 1)[-1])
-        else:
-            text_response(self, "Not found", 404)
+    messages = [
+        {
+            "role": "system",
+            "content": f"You are a research assistant. Answer questions about this debate report.\n\nREPORT:\n{context}"
+        }
+    ]
+    for msg in history[-6:]:
+        messages.append({"role": msg["role"], "content": msg["text"]})
+    messages.append({"role": "user", "content": message})
 
-    def do_POST(self):
-        parsed = urlparse(self.path)
-        if parsed.path == "/api/input":
-            self.handle_write_input()
-        elif parsed.path == "/api/run":
-            self.handle_run()
-        else:
-            text_response(self, "Not found", 404)
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=messages,
+        max_tokens=800,
+    )
+    return {"reply": response.choices[0].message.content}
 
-    def read_json(self):
-        length = int(self.headers.get("Content-Length", "0"))
-        if length == 0:
-            return {}
-        body = self.rfile.read(length).decode("utf-8")
-        return json.loads(body)
-
-    def serve_static(self, relative_path):
-        target = (WEB_DIR / relative_path).resolve()
-        if WEB_DIR.resolve() not in target.parents and target != WEB_DIR.resolve():
-            text_response(self, "Not found", 404)
-            return
-        if not target.exists() or not target.is_file():
-            text_response(self, "Not found", 404)
-            return
-
-        content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
-        body = target.read_bytes()
-        self.send_response(200)
-        self.send_header("Content-Type", content_type)
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-
-    def handle_status(self):
-        json_response(self, {
-            "agents": [
-                {"id": key, "name": value}
-                for key, value in AGENTS.items()
-                if key != "human"
-            ],
-            "modes": MODES,
-            "default_rounds": ROUNDS,
-            "input_files": list_input_files(),
-        })
-
-    def handle_reports(self):
-        reports = []
-        for path in sorted(DEBATES_DIR.glob("debate_*.md"), reverse=True):
-            reports.append({
-                "name": path.name,
-                "path": str(path),
-                "modified": path.stat().st_mtime,
-                "size": path.stat().st_size,
-            })
-        json_response(self, {"reports": reports})
-
-    def handle_report(self, query):
-        name = query.get("name", [""])[0]
-        target = (DEBATES_DIR / name).resolve()
-        if DEBATES_DIR.resolve() not in target.parents or not target.exists():
-            text_response(self, "Report not found", 404)
-            return
-        json_response(self, {
-            "name": target.name,
-            "content": target.read_text(encoding="utf-8"),
-        })
-
-    def handle_job(self, job_id):
-        with JOBS_LOCK:
-            job = JOBS.get(job_id)
-            if job:
-                job = dict(job)
-        if not job:
-            json_response(self, {"error": "Job not found"}, 404)
-            return
-        json_response(self, job)
-
-    def handle_write_input(self):
-        try:
-            payload = self.read_json()
-            name = payload.get("name") or "web_input.md"
-            content = payload.get("content") or ""
-            target = safe_input_path(name)
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(content, encoding="utf-8")
-            json_response(self, {
-                "ok": True,
-                "file": {
-                    "path": str(target.relative_to(INPUT_DIR)),
-                    "size": target.stat().st_size,
-                },
-            })
-        except Exception as exc:
-            json_response(self, {"error": str(exc)}, 400)
-
-    def handle_run(self):
-        try:
-            payload = self.read_json()
-            job_id = str(uuid.uuid4())
-            with JOBS_LOCK:
-                JOBS[job_id] = {
-                    "id": job_id,
-                    "status": "queued",
-                    "result": None,
-                    "error": None,
-                }
-            thread = threading.Thread(target=run_job, args=(job_id, payload), daemon=True)
-            thread.start()
-            json_response(self, {"job_id": job_id})
-        except Exception as exc:
-            json_response(self, {"error": str(exc)}, 400)
-
-
-def main():
-    server = ThreadingHTTPServer(("127.0.0.1", 8765), DebateWebHandler)
-    print("Debate web UI running at http://127.0.0.1:8765")
-    server.serve_forever()
+# ENTRY POINT
 
 
 if __name__ == "__main__":
-    main()
+    import uvicorn
+    uvicorn.run("web_app:app", host="127.0.0.1", port=8765, reload=True)

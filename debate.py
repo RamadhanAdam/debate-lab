@@ -120,7 +120,7 @@ async def run_round(
     mode: str,
     previous_arguments: list,
     include_human: bool,
-    run_warnings: list,
+    on_argument: callable = None,
 ) -> list:
     """
     Run one round of the debate.
@@ -152,6 +152,8 @@ async def run_round(
 
             argument = result
             round_arguments.append((agent.display_name, argument))
+            if on_argument: 
+                on_argument(agent.display_name, argument)
             print(f"\n{agent.display_name}:\n{argument}\n")
 
     else:
@@ -357,8 +359,9 @@ async def run_debate(
     topic: str = None,
     mode: str = DEFAULT_MODE,
     include_human: bool = True,
-    selected_agents: list | None = None,
-    rounds: int = ROUNDS,
+    selected_agents: list = None,
+    rounds: int = None,
+    on_argument: callable = None,
 ):
     """
     Run a full debate.
@@ -410,15 +413,15 @@ async def run_debate(
 
     for round_num in range(1, rounds + 1):
         round_arguments = await run_round(
-            agents=agents,
-            topic=topic,
-            context=context,
-            round_num=round_num,
-            mode=mode,
-            previous_arguments=all_arguments.copy(),
-            include_human=include_human,
-            run_warnings=run_warnings,
-        )
+                            agents=agents,
+                            topic=topic,
+                            context=context,
+                            round_num=round_num,
+                            mode=mode,
+                            previous_arguments=all_arguments.copy(),
+                            include_human=include_human,
+                            on_argument=on_argument,
+                        )
 
         all_rounds.append(round_arguments)
 
