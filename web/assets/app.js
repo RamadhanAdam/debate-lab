@@ -449,7 +449,13 @@ createApp({
         chatLoading.value = false;
       }
     }
-
+    async function clearAllInputs() {
+      if (!confirm('Delete all input files?')) return;
+      for (const f of inputFiles.value) {
+        await api("/api/input", { method: "DELETE", body: JSON.stringify({ name: f.path }) });
+      }
+      await loadInputFiles();
+    }
     // ── Navigate to arena ──
     function goToArena() {
       loadInputFiles();
@@ -491,7 +497,7 @@ createApp({
       humanTurn, humanInput, runDebate,
       // inputs
       inputFiles, draftContent, saveDraft, deleteInputFile,
-      uploadFile, cloneUrl, cloneStatus, cloneMsg, cloneRepo,
+      uploadFile, cloneUrl, cloneStatus, cloneMsg, cloneRepo, clearAllInputs,
       // reports
       reports, selectedReport, reportContent, reportHtml,
       loadReport, deleteReport,
@@ -733,8 +739,7 @@ createApp({
               <div class="transcript-who" :class="entry.agent">
                 {{ entry.name }} · Round {{ Math.floor(i / selectedAgents.length) + 1 }}
               </div>
-              <div class="transcript-text">
-                {{ entry.expanded ? entry.text : entry.text.slice(0, 200) + (entry.text.length > 200 ? '...' : '') }}
+              <div class="transcript-text" v-html="marked.parse(entry.expanded ? entry.text : entry.text.slice(0, 200) + (entry.text.length > 200 ? '...' : ''))">
                 <button v-if="entry.text.length > 200" 
                         @click="entry.expanded = !entry.expanded"
                         style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:12px;padding:4px 0 0 0;display:block">
@@ -842,7 +847,10 @@ createApp({
           <div class="panel">
             <div class="panel-head">
               <h2>Input Files</h2>
-              <span class="pill">{{ inputFiles.length }}</span>
+                <div style="display:flex;gap:6px;align-items:center">
+                  <span class="pill">{{ inputFiles.length }}</span>
+                  <button class="btn btn-danger btn-sm" @click="clearAllInputs">Clear all</button>
+                </div>
             </div>
             <div class="file-list" style="margin-bottom:10px">
               <div v-if="!inputFiles.length" class="muted" style="font-size:13px">No files yet.</div>
