@@ -736,7 +736,7 @@ createApp({
                  :style="{'--agent-color': meta.color}"
                  @click="toggleAgent(id)">
               <div class="chip-dot"></div>
-              <div class="chip-name">{{ meta.initials }}</div>
+              <div class="chip-name">{{ meta.name.split(' ')[0] }}</div>
             </div>
           </div>
         </div>

@@ -59,6 +59,19 @@
 }
 .user-name { flex: 1; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+.sidebar.collapsed {
+  width: 68px;
+}
+.sidebar.collapsed h1, 
+.sidebar.collapsed p, 
+.sidebar.collapsed .user-name, 
+.sidebar.collapsed .nav-label { 
+  display: none; 
+}
+.sidebar.collapsed .sidebar-brand { justify-content: center; padding: 20px 0; }
+.sidebar.collapsed .nav-item { justify-content: center; padding: 12px; }
+.sidebar.collapsed .sidebar-user { justify-content: center; padding: 16px 0; }
+
 .main-content {
   flex: 1;
   display: flex;
