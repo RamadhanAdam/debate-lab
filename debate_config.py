@@ -24,12 +24,18 @@ INPUT_DIR.mkdir(exist_ok=True)
 # API keys 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", None)
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", None)
+KIMI_API_KEY = os.getenv("KIMI_API_KEY", None)
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", None)
+ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", None)
 
 # Models
 
 GPT_MODEL = "gpt-4.1"
 GROQ_MODEL = "llama-3.3-70b-versatile"
 GEMINI_MODEL = "gemini-2.0-flash-lite"
+KIMI_MODEL = "moonshot-v1-8k"
+DEEPSEEK_MODEL = "deepseek-chat"
+CLAUDE_MODEL = "claude-3-5-haiku-20241022"
 
 # Debate settings
 ROUNDS = 3  # Number of debate rounds
@@ -71,5 +77,8 @@ AGENTS = {
     "gpt": "GPT-4.1",
     "groq": "Llama-3.3 (Groq)",
     "gemini": "Gemini Flash",
+    "kimi": "Moonshot Kimi",
+    "deepseek": "DeepSeek",
+    "claude": "Claude 3.5 Haiku",
     "human": "Human",
 }

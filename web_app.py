@@ -308,6 +308,69 @@ async def api_delete_input(request: Request):
     target.unlink()
     return {"ok": True}
 
+@app.get("/api/agent-stats")
+async def api_agent_stats(request: Request):
+    require_user(request)
+    from reward import q_manager
+    return {"stats": q_manager.get_agent_stats()}
+
+@app.get("/api/sessions")
+async def api_sessions(request: Request):
+    user = require_user(request)
+    result = supabase.table("debates").select("id, topic, mode, created_at, agent_averages").eq("user_id", user["user_id"]).order("created_at", desc=True).limit(20).execute()
+    return {"sessions": result.data}
+
+@app.post("/api/validate-key")
+async def api_validate_key(request: Request):
+    require_user(request)
+    payload = await request.json()
+    provider = payload.get("provider")
+    key = payload.get("key")
+    if not key:
+        return {"valid": False, "error": "No key provided"}
+    
+    try:
+        if provider == "groq":
+            from groq import Groq
+            client = Groq(api_key=key, max_retries=0)
+            client.models.list()
+        elif provider == "google":
+            from google import genai
+            client = genai.Client(api_key=key)
+            client.models.get(model="models/gemini-2.0-flash-lite")
+        elif provider == "anthropic":
+            import anthropic
+            client = anthropic.Anthropic(api_key=key, max_retries=0)
+            client.models.list()
+        elif provider in ("kimi", "deepseek"):
+            from openai import OpenAI
+            base_url = "https://api.moonshot.cn/v1" if provider == "kimi" else "https://api.deepseek.com/v1"
+            client = OpenAI(api_key=key, base_url=base_url, max_retries=0)
+            client.models.list()
+        else:
+            return {"valid": False, "error": f"Unknown provider {provider}"}
+        return {"valid": True}
+    except Exception as e:
+        return {"valid": False, "error": str(e)}
+
+@app.post("/api/jobs/{job_id}/human-input")
+async def api_human_input(job_id: str, request: Request):
+    require_user(request)
+    payload = await request.json()
+    text = payload.get("text", "").strip()
+    
+    with JOBS_LOCK:
+        job = JOBS.get(job_id)
+        if not job or job.get("status") != "human_turn":
+            raise HTTPException(status_code=400, detail="Job not waiting for human input")
+        
+        job["human_input"] = text if text else None
+        event = job.get("human_event")
+        if event:
+            event.set()
+            
+    return {"ok": True}
+
 @app.get("/api/reports")
 async def api_reports(request: Request):
     user = require_user(request)
@@ -395,6 +458,8 @@ def run_job(job_id: str, payload: dict, user: dict):
     with JOBS_LOCK:
         JOBS[job_id]["status"] = "running"
         JOBS[job_id]["transcript"] = []
+        JOBS[job_id]["human_event"] = threading.Event()
+        JOBS[job_id]["human_input"] = None
 
     def on_argument(agent_name, argument):
         with JOBS_LOCK:
@@ -403,28 +468,31 @@ def run_job(job_id: str, payload: dict, user: dict):
                 "text": argument,
             })
 
+    def human_input_hook(round_num: int) -> str | None:
+        with JOBS_LOCK:
+            JOBS[job_id]["status"] = "human_turn"
+            JOBS[job_id]["human_event"].clear()
+            JOBS[job_id]["human_input"] = None
+        
+        # Wait for input from API (up to 5 mins)
+        JOBS[job_id]["human_event"].wait(timeout=300)
+        
+        with JOBS_LOCK:
+            JOBS[job_id]["status"] = "running"
+            return JOBS[job_id]["human_input"]
+
     try:
         selected_agents = payload.get("agents") or ["groq"]
+        include_human = "human" in selected_agents
         result = asyncio.run(run_debate(
             topic=payload.get("topic") or None,
             mode=payload.get("mode") or "review",
-            include_human=False,
+            include_human=include_human,
             selected_agents=selected_agents,
             rounds=int(payload.get("rounds") or ROUNDS),
             on_argument=on_argument,
+            human_input_hook=human_input_hook,
         ))
-
-        supabase.table("debates").insert({
-            "user_id": user["user_id"],
-            "topic": result["topic"],
-            "mode": result["mode"],
-            "rounds": result["rounds"],
-            "agents": result["agents"],
-            "artifact_path": result["artifact_path"],
-            "summary": result["summary"],
-            "warnings": result["warnings"],
-            "agent_averages": result["agent_averages"],
-        }).execute()
 
         with JOBS_LOCK:
             JOBS[job_id].update({
@@ -438,6 +506,33 @@ def run_job(job_id: str, payload: dict, user: dict):
                 "error": str(exc),
             })
             
+
+@app.post("/api/save_report/{job_id}")
+async def api_save_report(job_id: str, request: Request):
+    user = require_user(request)
+    with JOBS_LOCK:
+        job = JOBS.get(job_id)
+    
+    if not job or job["status"] != "completed" or not job["result"]:
+        raise HTTPException(status_code=400, detail="Job not found or not completed")
+    
+    result = job["result"]
+    
+    # Save to Supabase
+    supabase.table("debates").insert({
+        "user_id": user["user_id"],
+        "topic": result["topic"],
+        "mode": result["mode"],
+        "rounds": result["rounds"],
+        "agents": result["agents"],
+        "artifact_path": result["artifact_path"],
+        "summary": result["summary"],
+        "warnings": result["warnings"],
+        "agent_averages": result["agent_averages"],
+    }).execute()
+    
+    return {"ok": True}
+
 
 @app.post("/api/repo/clone")
 async def api_clone_repo(request: Request):
@@ -473,35 +568,38 @@ async def api_clone_repo(request: Request):
 
 @app.post("/api/chat")
 async def api_chat(request: Request):
-    require_user(request)
-    payload = await request.json()
-    message = payload.get("message", "")
-    context = payload.get("context", "")[:4000]
-    history = payload.get("history", [])
-    groq_key = payload.get("groq_key") or os.environ.get("GROQ_API_KEY", "")
+    try:
+        require_user(request)
+        payload = await request.json()
+        message = payload.get("message", "")
+        context = payload.get("context", "")[:4000]
+        history = payload.get("history", [])
+        groq_key = payload.get("groq_key") or os.environ.get("GROQ_API_KEY", "")
 
-    if not groq_key:
-        raise HTTPException(status_code=400, detail="Groq API key required for chat")
+        if not groq_key:
+            return JSONResponse(status_code=400, content={"error": "Groq API key required for chat"})
 
-    from groq import Groq
-    client = Groq(api_key=groq_key, timeout=30, max_retries=0)
+        from groq import Groq
+        client = Groq(api_key=groq_key, timeout=30, max_retries=0)
 
-    messages = [
-        {
-            "role": "system",
-            "content": f"You are a research assistant. Answer questions about this debate report.\n\nREPORT:\n{context}"
-        }
-    ]
-    for msg in history[-6:]:
-        messages.append({"role": msg["role"], "content": msg["text"]})
-    messages.append({"role": "user", "content": message})
+        messages = [
+            {
+                "role": "system",
+                "content": f"You are a research assistant. Answer questions about this debate report.\n\nREPORT:\n{context}"
+            }
+        ]
+        for msg in history[-6:]:
+            messages.append({"role": msg["role"], "content": msg["text"]})
+        messages.append({"role": "user", "content": message})
 
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=messages,
-        max_tokens=800,
-    )
-    return {"reply": response.choices[0].message.content}
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=messages,
+            max_tokens=800,
+        )
+        return JSONResponse({"reply": response.choices[0].message.content})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
 
 # ENTRY POINT
 

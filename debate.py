@@ -122,6 +122,7 @@ async def run_round(
     include_human: bool,
     on_argument: callable = None,
     run_warnings: list = None,
+    human_input_hook: callable = None,
 ) -> list:
     """
     Run one round of the debate.
@@ -134,17 +135,20 @@ async def run_round(
     print(f"{'='*60}\n")
 
     round_arguments = []
+    
+    # Sort agents by historical best order
+    ordered_agents = [agent for agent_name in q_manager.get_best_agent_order([a.name for a in agents]) for agent in agents if agent.name == agent_name]
 
     if round_num == 1:
         # Round 1: all agents argue at the same time
         print("All agents arguing simultaneously...\n")
         tasks = [
             agent.argue(topic, context, round_num, mode, previous_arguments)
-            for agent in agents
+            for agent in ordered_agents
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        for agent, result in zip(agents, results):
+        for agent, result in zip(ordered_agents, results):
             if isinstance(result, Exception):
                 warning = f"{agent.display_name} failed in round {round_num}: {result}"
                 if run_warnings is not None: run_warnings.append(warning)
@@ -159,7 +163,7 @@ async def run_round(
 
     else:
         # Rounds 2 and 3: agents argue one by one
-        for agent in agents:
+        for agent in ordered_agents:
             print(f"\n{agent.display_name} is arguing...\n")
             try:
                 argument = await agent.argue(
@@ -171,14 +175,26 @@ async def run_round(
                 print(f"{agent.display_name}: skipped ({e})\n")
                 continue
             round_arguments.append((agent.display_name, argument))
+            if on_argument:
+                on_argument(agent.display_name, argument)
             print(f"{agent.display_name}:\n{argument}\n")
             previous_arguments.append((agent.display_name, argument))
 
     # Human turn
     if include_human:
-        human_argument = await get_human_input(round_num)
+        if human_input_hook:
+            if asyncio.iscoroutinefunction(human_input_hook):
+                human_argument = await human_input_hook(round_num)
+            else:
+                loop = asyncio.get_event_loop()
+                human_argument = await loop.run_in_executor(None, human_input_hook, round_num)
+        else:
+            human_argument = await get_human_input(round_num)
+            
         if human_argument:
             round_arguments.append(("Human", human_argument))
+            if on_argument:
+                on_argument("Human", human_argument)
             print(f"\nHuman:\n{human_argument}\n")
 
     return round_arguments
@@ -363,6 +379,7 @@ async def run_debate(
     selected_agents: list = None,
     rounds: int = None,
     on_argument: callable = None,
+    human_input_hook: callable = None,
 ):
     """
     Run a full debate.
@@ -387,10 +404,8 @@ async def run_debate(
     print(f"{'='*60}\n")
 
     selected_agents = selected_agents or ["gpt", "groq", "gemini"]
-    selected_agents = q_manager.rank_actions(
-        build_state(1, mode, []),
-        selected_agents,
-    )
+    # We no longer select agents randomly or rank them and exclude some. 
+    # If the user selects them, we use them all. We just sort them later in run_round.
     agents = []
     for agent_name in selected_agents:
         if agent_name not in AGENTS or agent_name == "human":
@@ -423,6 +438,7 @@ async def run_debate(
                             include_human=include_human,
                             on_argument=on_argument,
             run_warnings=run_warnings,
+            human_input_hook=human_input_hook,
                         )
 
         all_rounds.append(round_arguments)

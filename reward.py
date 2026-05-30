@@ -79,6 +79,56 @@ class QTableManager:
             remaining.remove(action)
         return ranked
 
+    def get_agent_stats(self) -> list:
+        """
+        Returns stats for all agents: total debates, avg reward, win count, win rate.
+        """
+        stats = {}
+        # Simple heuristic based on average q-values across all states where agent is an action
+        for state, actions in self.q_table.items():
+            best_action = max(actions, key=actions.get) if actions else None
+            for action, q_val in actions.items():
+                if action not in stats:
+                    stats[action] = {"total_debates": 0, "total_reward": 0.0, "win_count": 0}
+                stats[action]["total_debates"] += 1
+                stats[action]["total_reward"] += q_val
+                if action == best_action:
+                    stats[action]["win_count"] += 1
+
+        result = []
+        for agent in AGENTS:
+            if agent == "human": continue
+            agent_stats = stats.get(agent, {"total_debates": 0, "total_reward": 0.0, "win_count": 0})
+            total = agent_stats["total_debates"]
+            avg_reward = agent_stats["total_reward"] / total if total > 0 else 0.0
+            win_rate = agent_stats["win_count"] / total if total > 0 else 0.0
+            result.append({
+                "agent": agent,
+                "name": AGENTS[agent],
+                "total_debates": total,
+                "avg_score": round(avg_reward * 100),
+                "win_rate": round(win_rate * 100)
+            })
+        return result
+
+    def get_best_agent_order(self, agents: list) -> list:
+        """
+        Returns agents sorted by their average Q-value across all states descending.
+        """
+        agent_scores = {agent: 0.0 for agent in agents}
+        agent_counts = {agent: 0 for agent in agents}
+        for state, actions in self.q_table.items():
+            for action, q_val in actions.items():
+                if action in agent_scores:
+                    agent_scores[action] += q_val
+                    agent_counts[action] += 1
+        
+        avg_scores = {
+            agent: agent_scores[agent] / agent_counts[agent] if agent_counts[agent] > 0 else 0.0
+            for agent in agents
+        }
+        return sorted(agents, key=lambda a: avg_scores[a], reverse=True)
+
 
 # ARGUMENT SCORER
 

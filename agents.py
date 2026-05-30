@@ -10,14 +10,22 @@ import subprocess
 from abc import ABC, abstractmethod
 from groq import Groq
 from google import genai
+import anthropic
+from openai import OpenAI
 from copilot import CopilotClient, SubprocessConfig
 from copilot.session import PermissionHandler
 from debate_config import (
     GPT_MODEL,
     GROQ_MODEL,
     GEMINI_MODEL,
+    KIMI_MODEL,
+    DEEPSEEK_MODEL,
+    CLAUDE_MODEL,
     GROQ_API_KEY,
     GOOGLE_API_KEY,
+    KIMI_API_KEY,
+    DEEPSEEK_API_KEY,
+    ANTHROPIC_API_KEY,
     AGENTS,
     SCORING_CRITERIA,
     TIME_LIMIT,
@@ -25,6 +33,7 @@ from debate_config import (
 
 
 # BASE AGENT
+
 
 class BaseAgent(ABC):
     """
@@ -44,35 +53,37 @@ class BaseAgent(ABC):
         self.history.append(argument)
 
     def build_prompt(self, topic: str, context: str, round_num: int, mode: str, other_arguments: list) -> str:
+        if len(context) > 12000:
+            context = context[:6000] + "\n\n...[truncated]...\n\n" + context[-6000:]
+
         if round_num == 1:
             if mode == "review":
                 instruction = (
-                    "You are an expert peer reviewer. "
+                    "You are a rigorous analyst and expert peer reviewer. "
                     "Read the provided files carefully and give your independent critical assessment. "
-                    "Be specific, cite evidence from the files, and be honest about weaknesses."
+                    "Cite specific evidence from the files, identify unjustified assumptions, and be precise."
                 )
             else:
                 instruction = (
-                    "You are a debater. "
+                    "You are a rigorous analyst and debater. "
                     "Take a strong position on the topic and argue it clearly. "
-                    "Be specific and use evidence from the provided files."
+                    "Cite specific evidence from the provided files, identify unjustified assumptions, and be precise."
                 )
 
         elif round_num == 2:
             others = "\n\n".join([f"{name}:\n{arg}" for name, arg in other_arguments])
             instruction = (
                 f"You have read the files and made your initial assessment. "
-                f"Now read what the other reviewers said and respond directly to their points.\n\n"
+                f"Now read what the other reviewers said and directly respond to each other agent by name.\n\n"
                 f"Other reviewers said:\n{others}\n\n"
-                f"Respond specifically to their arguments. Agree where they are right, "
-                f"push back where you disagree, and add anything important they missed."
+                f"Quote their words, agree or disagree with specific points, and provide your counter-arguments."
             )
 
         else:
             instruction = (
                 "This is your final argument. "
                 "Synthesize everything that has been said across all rounds. "
-                "State your final position clearly and summarize the most important points."
+                "Provide the 3 most important actionable recommendations, state what to do first, and be direct and concise."
             )
 
         prompt = f"""
@@ -173,7 +184,7 @@ class GroqAgent(BaseAgent):
                 lambda: self.client.chat.completions.create(
                     model=GROQ_MODEL,
                     messages=[{"role": "user", "content": prompt}],
-                    max_tokens=2048,
+                    max_tokens=4096,
                 )
             ),
             timeout=TIME_LIMIT,
@@ -214,6 +225,102 @@ class GeminiAgent(BaseAgent):
         return argument
 
 
+# KIMI AGENT
+
+class KimiAgent(BaseAgent):
+    """
+    Moonshot Kimi debater using OpenAI compatible endpoint.
+    """
+
+    def __init__(self):
+        super().__init__("kimi")
+        if not KIMI_API_KEY:
+            raise ValueError("KIMI_API_KEY is not set in your .env file.")
+        self.client = OpenAI(api_key=KIMI_API_KEY, base_url="https://api.moonshot.cn/v1", timeout=TIME_LIMIT, max_retries=0)
+
+    async def argue(self, topic: str, context: str, round_num: int, mode: str, other_arguments: list) -> str:
+        prompt = self.build_prompt(topic, context, round_num, mode, other_arguments)
+        loop = asyncio.get_event_loop()
+        response = await asyncio.wait_for(
+            loop.run_in_executor(
+                None,
+                lambda: self.client.chat.completions.create(
+                    model=KIMI_MODEL,
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=4096,
+                )
+            ),
+            timeout=TIME_LIMIT,
+        )
+        argument = response.choices[0].message.content
+        self.add_to_history(argument)
+        return argument
+
+
+# DEEPSEEK AGENT
+
+class DeepSeekAgent(BaseAgent):
+    """
+    DeepSeek debater using OpenAI compatible endpoint.
+    """
+
+    def __init__(self):
+        super().__init__("deepseek")
+        if not DEEPSEEK_API_KEY:
+            raise ValueError("DEEPSEEK_API_KEY is not set in your .env file.")
+        self.client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com/v1", timeout=TIME_LIMIT, max_retries=0)
+
+    async def argue(self, topic: str, context: str, round_num: int, mode: str, other_arguments: list) -> str:
+        prompt = self.build_prompt(topic, context, round_num, mode, other_arguments)
+        loop = asyncio.get_event_loop()
+        response = await asyncio.wait_for(
+            loop.run_in_executor(
+                None,
+                lambda: self.client.chat.completions.create(
+                    model=DEEPSEEK_MODEL,
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=4096,
+                )
+            ),
+            timeout=TIME_LIMIT,
+        )
+        argument = response.choices[0].message.content
+        self.add_to_history(argument)
+        return argument
+
+
+# CLAUDE AGENT
+
+class ClaudeAgent(BaseAgent):
+    """
+    Claude debater using Anthropic SDK.
+    """
+
+    def __init__(self):
+        super().__init__("claude")
+        if not ANTHROPIC_API_KEY:
+            raise ValueError("ANTHROPIC_API_KEY is not set in your .env file.")
+        self.client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY, timeout=TIME_LIMIT, max_retries=0)
+
+    async def argue(self, topic: str, context: str, round_num: int, mode: str, other_arguments: list) -> str:
+        prompt = self.build_prompt(topic, context, round_num, mode, other_arguments)
+        loop = asyncio.get_event_loop()
+        response = await asyncio.wait_for(
+            loop.run_in_executor(
+                None,
+                lambda: self.client.messages.create(
+                    model=CLAUDE_MODEL,
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=4096,
+                )
+            ),
+            timeout=TIME_LIMIT,
+        )
+        argument = response.content[0].text
+        self.add_to_history(argument)
+        return argument
+
+
 # FACTORY FUNCTION
 
 def get_agent(name: str) -> BaseAgent:
@@ -225,6 +332,9 @@ def get_agent(name: str) -> BaseAgent:
         "gpt": GPTAgent,
         "groq": GroqAgent,
         "gemini": GeminiAgent,
+        "kimi": KimiAgent,
+        "deepseek": DeepSeekAgent,
+        "claude": ClaudeAgent,
     }
     if name not in agents:
         raise ValueError(f"Unknown agent: {name}. Choose from {list(agents.keys())}")

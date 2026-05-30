@@ -1,0 +1,102 @@
+/* layout.css */
+.app-shell {
+  display: flex;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.sidebar {
+  width: 220px;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  border-right: 1px solid var(--glass-border);
+  display: flex;
+  flex-direction: column;
+  transition: width 0.3s, transform 0.3s;
+  z-index: 50;
+}
+
+.sidebar-brand {
+  padding: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--glass-border);
+}
+.sidebar-brand h1 { font-size: 16px; font-weight: 800; }
+.sidebar-brand p { font-size: 11px; color: var(--ink2); }
+.mark {
+  width: 32px; height: 32px;
+  background: var(--accent);
+  border-radius: 8px;
+  display: grid; place-items: center;
+  color: #fff; font-weight: 900; font-size: 14px;
+}
+
+.sidebar-nav {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.sidebar-user {
+  padding: 16px;
+  border-top: 1px solid var(--glass-border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.user-avatar {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  display: grid; place-items: center;
+  font-size: 12px; font-weight: 700;
+}
+.user-name { flex: 1; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.page {
+  padding: 32px;
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+  overflow-y: auto;
+  height: 100%;
+}
+
+/* Mobile & Tablet */
+.hamburger { display: none; }
+.overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 40; }
+
+@media (max-width: 1024px) {
+  .sidebar { width: 68px; }
+  .sidebar-brand h1, .sidebar-brand p, .user-name, .nav-label { display: none; }
+  .sidebar-brand { justify-content: center; padding: 20px 0; }
+  .nav-item { justify-content: center; padding: 12px; }
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    transform: translateX(-100%);
+    width: 280px;
+  }
+  .sidebar.open { transform: translateX(0); }
+  .sidebar-brand h1, .sidebar-brand p, .user-name, .nav-label { display: block; }
+  .sidebar-brand { justify-content: flex-start; padding: 20px; }
+  .nav-item { justify-content: flex-start; padding: 12px; }
+  .hamburger { display: block; }
+  .overlay.show { display: block; }
+}
