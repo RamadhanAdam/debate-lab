@@ -452,22 +452,23 @@ async def run_debate(
     all_arguments = []
     all_scores = []
     run_warnings = []
-for round_num in range(1, rounds + 1):
-    round_arguments = await run_round(
-                        agents=agents,
-                        topic=topic,
-                        context=context,
-                        round_num=round_num,
-                        mode=mode,
-                        previous_arguments=all_arguments.copy(),
-                        include_human=include_human,
-                        on_argument=on_argument,
-        run_warnings=run_warnings,
-        human_input_hook=human_input_hook,
-        check_interject_hook=check_interject_hook,
-        goal=goal,
-        persona=persona,
-                    )
+
+    for round_num in range(1, rounds + 1):
+        round_arguments = await run_round(
+            agents=agents,
+            topic=topic,
+            context=context,
+            round_num=round_num,
+            mode=mode,
+            previous_arguments=all_arguments.copy(),
+            include_human=include_human,
+            on_argument=on_argument,
+            run_warnings=run_warnings,
+            human_input_hook=human_input_hook,
+            check_interject_hook=check_interject_hook,
+            goal=goal,
+            persona=persona,
+        )
 
         all_rounds.append(round_arguments)
 
