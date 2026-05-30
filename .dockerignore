@@ -1,0 +1,11 @@
+node_modules/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+.git/
+.gitignore
+debates/
+input/
+reviews/
+q_table.json

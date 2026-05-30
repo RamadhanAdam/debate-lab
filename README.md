@@ -4,7 +4,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.11+-blue)
 ![JavaScript](https://img.shields.io/badge/JavaScript-Vue.js-green)
-![License](https://img.shields.io/badge/License-MIT-purple)
+![License](https://img.shields.io/badge/License-Commercial-red)
 
 Debate Lab is a multi-agent debate system where top-tier AI models argue about the same material from different angles. It includes a beautiful Glass UI and a Q-learning reward system that tracks argument quality over time and learns which model argues best.
 
