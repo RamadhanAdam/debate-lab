@@ -265,47 +265,62 @@ async def api_status(request: Request):
         ],
         "modes": MODES,
         "default_rounds": ROUNDS,
-        "input_files": list_input_files(),
+        "input_files": list_input_files(user["user_id"]),
         "user": user,
     }
 
 @app.get("/api/inputs")
 async def api_inputs(request: Request):
-    require_user(request)
-    return {"files": list_input_files()}
+    user = require_user(request)
+    return {"files": list_input_files(user["user_id"])}
 
 @app.post("/api/input")
 async def api_write_input(request: Request):
-    require_user(request)
+    user = require_user(request)
     payload = await request.json()
     name = payload.get("name") or "web_input.md"
     content = payload.get("content") or ""
-    target = (INPUT_DIR / name).resolve()
-    if INPUT_DIR.resolve() not in target.parents:
+    
+    target_dir = INPUT_DIR / user["user_id"]
+    target = (target_dir / name).resolve()
+    
+    if target_dir.resolve() not in target.parents:
         raise HTTPException(status_code=400, detail="Invalid path")
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content, encoding="utf-8")
     return {
         "ok": True,
         "file": {
-            "path": str(target.relative_to(INPUT_DIR)),
+            "path": str(target.relative_to(target_dir)),
             "size": target.stat().st_size,
         },
     }
 
 @app.delete("/api/input")
 async def api_delete_input(request: Request):
-    require_user(request)
+    user = require_user(request)
     payload = await request.json()
     name = payload.get("name")
     if not name:
         raise HTTPException(status_code=400, detail="No file name provided")
-    target = (INPUT_DIR / name).resolve()
-    if INPUT_DIR.resolve() not in target.parents:
+        
+    target_dir = INPUT_DIR / user["user_id"]
+    target = (target_dir / name).resolve()
+    
+    if target_dir.resolve() not in target.parents:
         raise HTTPException(status_code=400, detail="Invalid path")
     if not target.exists():
         raise HTTPException(status_code=404, detail="File not found")
     target.unlink()
+    return {"ok": True}
+
+@app.delete("/api/inputs/all")
+async def api_delete_all_inputs(request: Request):
+    import shutil
+    user = require_user(request)
+    target_dir = INPUT_DIR / user["user_id"]
+    if target_dir.exists():
+        shutil.rmtree(target_dir)
     return {"ok": True}
 
 @app.get("/api/agent-stats")
@@ -492,6 +507,7 @@ def run_job(job_id: str, payload: dict, user: dict):
             rounds=int(payload.get("rounds") or ROUNDS),
             on_argument=on_argument,
             human_input_hook=human_input_hook,
+            user_id=user["user_id"],
         ))
 
         with JOBS_LOCK:
@@ -606,4 +622,4 @@ async def api_chat(request: Request):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("web_app:app", host="127.0.0.1", port=8765, reload=True)
+    uvicorn.run("web_app:app", host="127.0.0.1", port=8765, reload=True)65, reload=True)

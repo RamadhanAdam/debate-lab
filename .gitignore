@@ -8,4 +8,4 @@ debates/
 reviews/
 venv/
 .conda/
-*.egg-info/
+*.egg-info/\n# Ignored inputs and debates\ninput/\ndebates/\nq_table.json

@@ -3,13 +3,13 @@ import {
   checkAuthReq, emailSignInReq, emailRegisterReq 
 } from "./auth.js";
 import { 
-  fetchStatus, fetchInputs, saveInput, deleteInput, 
+  fetchStatus, fetchInputs, saveInput, deleteInput, deleteAllInputsReq,
   fetchReports, fetchReport, deleteReportReq, cloneRepoReq, sendChatReq,
   validateKeyReq, fetchAgentStats, fetchSessions
 } from "./api.js";
 import { useArena } from "./arena.js";
 
-const { createApp, ref, computed, onMounted, watch } = Vue;
+const { createApp, ref, computed, onMounted, watch } = window.Vue;
 
 createApp({
   setup() {
@@ -153,7 +153,7 @@ createApp({
         const res = await validateKeyReq(provider, keys.value[provider]);
         if (res.valid) {
           keysStatus.value[provider] = "valid";
-          addToast("Key Valid", \`\${provider} API key is working.\`, "success");
+          addToast("Key Valid", `${provider} API key is working.`, "success");
         } else {
           keysStatus.value[provider] = "invalid";
           addToast("Key Invalid", res.error, "error");
@@ -218,6 +218,13 @@ createApp({
       await loadInputFiles();
     }
 
+    async function clearAllInputs() {
+      if (!confirm("Are you sure you want to delete all input files?")) return;
+      await deleteAllInputsReq();
+      await loadInputFiles();
+      addToast("Cleared", "All input files have been deleted.", "info");
+    }
+
     async function uploadFile(event) {
       const files = event.target.files;
       if (!files.length) return;
@@ -226,7 +233,7 @@ createApp({
         await saveInput(file.name, text);
       }
       await loadInputFiles();
-      addToast("Uploaded", \`\${files.length} files added\`, "success");
+      addToast("Uploaded", `${files.length} files added`, "success");
     }
 
     async function cloneRepo() {
@@ -236,7 +243,7 @@ createApp({
         const res = await cloneRepoReq(cloneUrl.value);
         await loadInputFiles();
         cloneUrl.value = "";
-        addToast("Success", \`Cloned \${res.files_copied} files\`, "success");
+        addToast("Success", `Cloned ${res.files_copied} files`, "success");
       } catch (e) { addToast("Clone Failed", e.message, "error"); }
     }
 
@@ -285,7 +292,7 @@ createApp({
     }
 
     async function deleteReport(name) {
-      if (!confirm(\`Delete \${name}?\`)) return;
+      if (!confirm(`Delete ${name}?`)) return;
       await deleteReportReq(name);
       await loadReportsData();
       await loadDashboard();
@@ -332,6 +339,8 @@ createApp({
       if (val === "dashboard") loadDashboard();
     });
 
+    const marked = window.marked;
+
     return {
       user, authChecked, page, theme, toggleTheme,
       sidebarOpen, toggleSidebar, toasts,
@@ -343,14 +352,14 @@ createApp({
       jobStatus, jobMsg, currentJobId, arenaActive, configOpen, reportSaved, currentRound, totalRounds,
       speakingAgent, transcript, agentScores, warnings, summary, resultMode, humanTurn, humanInput,
       runDebate, saveReport, submitHuman,
-      inputFiles, draftContent, deleteInputFileObj, uploadFile, cloneUrl, cloneRepo,
+      inputFiles, draftContent, deleteInputFileObj, clearAllInputs, uploadFile, cloneUrl, cloneRepo,
       reports, filteredReports, selectedReport, reportContent, reportHtml, loadReport, deleteReport,
       chatMessages, chatInput, chatLoading, sendChat,
       goToArena, goToHistory,
       AGENT_META, formatBytes, timeAgo, marked
     };
   },
-  template: \`
+  template: `
 <!-- Toasts -->
 <div class="toast-container">
   <div v-for="t in toasts" :key="t.id" class="toast" :class="t.type">
@@ -665,7 +674,10 @@ createApp({
         <div class="field">
           <div style="display:flex;justify-content:space-between;align-items:center">
             <label>Input Files</label>
-            <span class="pill">{{ inputFiles.length }}</span>
+            <div style="display:flex;gap:6px;align-items:center">
+              <span class="pill">{{ inputFiles.length }}</span>
+              <button class="btn btn-danger btn-sm" @click="clearAllInputs" v-if="inputFiles.length">Clear All</button>
+            </div>
           </div>
           <div class="file-list" style="margin-top:8px">
             <div v-for="f in inputFiles" :key="f.path" class="file-item">
@@ -840,6 +852,6 @@ createApp({
     </div>
 
   </main>
-</div>
-  \`
-});
+  </div>
+  `
+  }).mount("#app");

@@ -32,7 +32,7 @@ from reward import q_manager, scorer
 
 # FILE LOADER
 
-def load_input_files() -> str:
+def load_input_files(user_id: str = None) -> str:
     """
     Load all files from the input directory and return them as one string.
     This is the context every agent reads before arguing.
@@ -40,15 +40,20 @@ def load_input_files() -> str:
     """
     supported = {".txt", ".md", ".py", ".ts", ".js", ".json", ".csv"}
     files = []
+    
+    target_dir = INPUT_DIR / user_id if user_id else INPUT_DIR
 
-    for path in sorted(INPUT_DIR.rglob("*")):
+    if not target_dir.exists():
+        return "No files found in the input directory. Add files to the input/ folder."
+
+    for path in sorted(target_dir.rglob("*")):
         if path.is_file() and path.suffix in supported:
             try:
                 content = path.read_text(encoding="utf-8")
-                relative_path = path.relative_to(INPUT_DIR)
+                relative_path = path.relative_to(target_dir)
                 files.append(f"=== FILE: {relative_path} ===\n{content}")
             except Exception as e:
-                relative_path = path.relative_to(INPUT_DIR)
+                relative_path = path.relative_to(target_dir)
                 files.append(f"=== FILE: {relative_path} === ERROR READING: {e}")
 
     if not files:
@@ -57,16 +62,21 @@ def load_input_files() -> str:
     return "\n\n".join(files)
 
 
-def list_input_files() -> list:
+def list_input_files(user_id: str = None) -> list:
     """
     Return supported input files with basic metadata for the web UI.
     """
     supported = {".txt", ".md", ".py", ".ts", ".js", ".json", ".csv"}
     files = []
-    for path in sorted(INPUT_DIR.rglob("*")):
+    target_dir = INPUT_DIR / user_id if user_id else INPUT_DIR
+    
+    if not target_dir.exists():
+        return []
+        
+    for path in sorted(target_dir.rglob("*")):
         if path.is_file() and path.suffix in supported:
             files.append({
-                "path": str(path.relative_to(INPUT_DIR)),
+                "path": str(path.relative_to(target_dir)),
                 "size": path.stat().st_size,
             })
     return files
@@ -380,6 +390,7 @@ async def run_debate(
     rounds: int = None,
     on_argument: callable = None,
     human_input_hook: callable = None,
+    user_id: str = None,
 ):
     """
     Run a full debate.
@@ -387,17 +398,18 @@ async def run_debate(
     topic:         what to debate or review. If None, uses the input files as the topic.
     mode:          review or debate
     include_human: whether to ask the human to participate each round
+    user_id:       id of the user running the debate (to load correct files)
     """
     if mode not in MODES:
         raise ValueError(f"Invalid mode: {mode}. Choose from {MODES}")
 
     print("\nLoading input files...")
-    context = load_input_files()
+    context = load_input_files(user_id)
 
     if not topic:
         topic = "Review and critique the work provided in the input files."
 
-    available_input_files = list_input_files()
+    available_input_files = list_input_files(user_id)
     print(f"\nTOPIC: {topic}")
     print(f"MODE: {mode}")
     print(f"ROUNDS: {rounds}")

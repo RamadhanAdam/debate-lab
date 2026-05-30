@@ -31,12 +31,16 @@ export async function deleteInput(name) {
   });
 }
 
+export async function deleteAllInputsReq() {
+  return api("/api/inputs/all", { method: "DELETE" });
+}
+
 export async function fetchReports() {
   return api("/api/reports");
 }
 
 export async function fetchReport(name) {
-  return api(\`/api/report?name=\${encodeURIComponent(name)}\`);
+  return api(`/api/report?name=${encodeURIComponent(name)}`);
 }
 
 export async function deleteReportReq(name) {
@@ -61,11 +65,11 @@ export async function runDebateReq(payload) {
 }
 
 export async function pollJobReq(jobId) {
-  return api(\`/api/jobs/\${jobId}\`);
+  return api(`/api/jobs/${jobId}`);
 }
 
 export async function saveReportReq(jobId) {
-  return api(\`/api/save_report/\${jobId}\`, { method: "POST" });
+  return api(`/api/save_report/${jobId}`, { method: "POST" });
 }
 
 export async function sendChatReq(payload) {
@@ -91,7 +95,7 @@ export async function fetchSessions() {
 }
 
 export async function submitHumanInputReq(jobId, text) {
-  return api(\`/api/jobs/\${jobId}/human-input\`, {
+  return api(`/api/jobs/${jobId}/human-input`, {
     method: "POST",
     body: JSON.stringify({ text })
   });
