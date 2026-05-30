@@ -386,6 +386,24 @@ async def api_human_input(job_id: str, request: Request):
             
     return {"ok": True}
 
+@app.post("/api/jobs/{job_id}/interject")
+async def api_interject(job_id: str, request: Request):
+    require_user(request)
+    payload = await request.json()
+    text = payload.get("text", "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="Text required")
+        
+    with JOBS_LOCK:
+        job = JOBS.get(job_id)
+        if not job or job.get("status") != "running":
+            raise HTTPException(status_code=400, detail="Job not running")
+        if "interjections" not in job:
+            job["interjections"] = []
+        job["interjections"].append(text)
+        
+    return {"ok": True}
+
 @app.get("/api/reports")
 async def api_reports(request: Request):
     user = require_user(request)
@@ -475,6 +493,7 @@ def run_job(job_id: str, payload: dict, user: dict):
         JOBS[job_id]["transcript"] = []
         JOBS[job_id]["human_event"] = threading.Event()
         JOBS[job_id]["human_input"] = None
+        JOBS[job_id]["interjections"] = []
 
     def on_argument(agent_name, argument):
         with JOBS_LOCK:
@@ -496,6 +515,12 @@ def run_job(job_id: str, payload: dict, user: dict):
             JOBS[job_id]["status"] = "running"
             return JOBS[job_id]["human_input"]
 
+    def check_interject_hook() -> list:
+        with JOBS_LOCK:
+            interjections = list(JOBS[job_id]["interjections"])
+            JOBS[job_id]["interjections"].clear()
+            return interjections
+
     try:
         selected_agents = payload.get("agents") or ["groq"]
         include_human = "human" in selected_agents
@@ -508,6 +533,7 @@ def run_job(job_id: str, payload: dict, user: dict):
             on_argument=on_argument,
             human_input_hook=human_input_hook,
             user_id=user["user_id"],
+            check_interject_hook=check_interject_hook,
         ))
 
         with JOBS_LOCK:

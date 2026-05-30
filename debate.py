@@ -133,6 +133,7 @@ async def run_round(
     on_argument: callable = None,
     run_warnings: list = None,
     human_input_hook: callable = None,
+    check_interject_hook: callable = None,
 ) -> list:
     """
     Run one round of the debate.
@@ -174,6 +175,17 @@ async def run_round(
     else:
         # Rounds 2 and 3: agents argue one by one
         for agent in ordered_agents:
+            # Check for human interjections before this agent speaks
+            if check_interject_hook:
+                interjections = check_interject_hook()
+                if interjections:
+                    for text in interjections:
+                        round_arguments.append(("Human", text))
+                        previous_arguments.append(("Human", text))
+                        if on_argument:
+                            on_argument("Human", text)
+                        print(f"\nHuman Interjection:\n{text}\n")
+
             print(f"\n{agent.display_name} is arguing...\n")
             try:
                 argument = await agent.argue(

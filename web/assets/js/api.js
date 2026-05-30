@@ -100,3 +100,10 @@ export async function submitHumanInputReq(jobId, text) {
     body: JSON.stringify({ text })
   });
 }
+
+export async function submitInterjectReq(jobId, text) {
+  return api(`/api/jobs/${jobId}/interject`, {
+    method: "POST",
+    body: JSON.stringify({ text })
+  });
+}

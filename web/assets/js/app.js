@@ -550,6 +550,7 @@ createApp({
         <header class="chat-header" style="padding-left: 56px">
           <h1>{{ topic || 'New Analysis' }}</h1>
           <div style="display:flex;gap:12px;align-items:center">
+            <button v-if="jobStatus === 'running'" class="btn btn-secondary btn-sm" @click="interjecting = true">Interject</button>
             <button v-if="jobStatus === 'completed' && !reportSaved" class="btn btn-primary btn-sm" @click="saveReport">Save Report</button>
             <span v-if="reportSaved" class="pill" style="color:var(--success);border-color:var(--success)">Saved</span>
             <button class="btn btn-secondary btn-sm" @click="configOpen = !configOpen">
@@ -575,7 +576,22 @@ createApp({
             </div>
           </div>
 
-          <div v-if="speakingAgent && jobStatus === 'running'" class="chat-bubble-row">
+          <div v-if="interjecting" class="chat-bubble-row human">
+            <div class="chat-avatar" :style="{background: AGENT_META.human.color}">{{ AGENT_META.human.initials }}</div>
+            <div class="chat-bubble-content">
+              <div class="chat-agent-name">Your Turn</div>
+              <div class="chat-bubble human" style="width:100%;max-width:500px">
+                <div style="font-weight:600;margin-bottom:8px">Interject an argument to the next agent:</div>
+                <textarea v-model="humanInput" placeholder="Type here..." rows="3"></textarea>
+                <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end">
+                  <button class="btn btn-ghost btn-sm" @click="interjecting=false">Cancel</button>
+                  <button class="btn btn-primary btn-sm" @click="submitInterject">Submit</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="speakingAgent && jobStatus === 'running' && !interjecting" class="chat-bubble-row">
             <div class="chat-avatar" :style="{background: AGENT_META[speakingAgent]?.color}">
               {{ AGENT_META[speakingAgent]?.initials }}
             </div>
@@ -587,7 +603,7 @@ createApp({
             </div>
           </div>
 
-          <div v-if="humanTurn" class="chat-bubble-row human">
+          <div v-if="humanTurn && !interjecting" class="chat-bubble-row human">
             <div class="chat-avatar" :style="{background: AGENT_META.human.color}">{{ AGENT_META.human.initials }}</div>
             <div class="chat-bubble-content">
               <div class="chat-agent-name">Your Turn</div>

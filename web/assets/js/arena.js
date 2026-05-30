@@ -1,4 +1,4 @@
-import { runDebateReq, pollJobReq, saveReportReq, submitHumanInputReq } from "./api.js";
+import { runDebateReq, pollJobReq, saveReportReq, submitHumanInputReq, submitInterjectReq } from "./api.js";
 import { AGENT_META } from "./constants.js";
 
 export function useArena(state) {
@@ -25,6 +25,7 @@ export function useArena(state) {
     state.totalRounds.value = state.rounds.value;
     state.page.value = "arena";
     state.humanTurn.value = false;
+    state.interjecting.value = false;
 
     try {
       const data = await runDebateReq({
@@ -49,6 +50,7 @@ export function useArena(state) {
       if (job.status === "human_turn") {
         state.jobMsg.value = "Waiting for your input...";
         state.humanTurn.value = true;
+        state.interjecting.value = false;
         
         // Ensure transcript is updated
         if (job.transcript && job.transcript.length) {
@@ -92,6 +94,7 @@ export function useArena(state) {
         state.arenaActive.value = false;
         state.speakingAgent.value = null;
         state.humanTurn.value = false;
+        state.interjecting.value = false;
         return;
       }
 
@@ -101,6 +104,7 @@ export function useArena(state) {
       state.arenaActive.value = false;
       state.speakingAgent.value = null;
       state.humanTurn.value = false;
+      state.interjecting.value = false;
 
       if (job.result) {
         updateArenaFromResult(job.result);
@@ -132,6 +136,29 @@ export function useArena(state) {
     } catch (e) {
         console.error("Failed to submit human input:", e);
         // Error will be caught by pollJob eventually, or we could add a toast here
+    }
+  }
+
+  async function submitInterject() {
+    if (!state.currentJobId.value) return;
+    
+    // Optimistically update UI
+    state.interjecting.value = false;
+    const text = state.humanInput.value.trim();
+    if (text) {
+        state.transcript.value.push({
+            agent: "human",
+            name: state.profileName.value || "You",
+            text: text,
+            expanded: true
+        });
+    }
+    state.humanInput.value = "";
+
+    try {
+        await submitInterjectReq(state.currentJobId.value, text);
+    } catch (e) {
+        console.error("Failed to submit interjection:", e);
     }
   }
 
@@ -170,5 +197,5 @@ export function useArena(state) {
     state.reportContent.value = result.summary; 
   }
 
-  return { runDebate, pollJob, saveReport, submitHuman, updateArenaFromResult };
+  return { runDebate, pollJob, saveReport, submitHuman, submitInterject, updateArenaFromResult };
 }
