@@ -337,6 +337,7 @@ createApp({
               agent: Object.keys(AGENT_META).find(k => AGENT_META[k].name === t.agent) || "groq",
               name: t.agent,
               text: t.text,
+              expanded: false,
             }));
           }
           setTimeout(() => pollJob(jobId), 500);
@@ -381,8 +382,7 @@ createApp({
       currentRound.value = result.rounds || 1;
 
       // Build transcript from all rounds
-      transcript.value = [];
-      if (result.rounds_data) {
+      if (result.rounds_data && result.rounds_data.length && transcript.value.length === 0) {
         for (const round of result.rounds_data) {
           for (const [agentName, argument] of round) {
             const agentKey = Object.keys(AGENT_META).find(
@@ -501,6 +501,7 @@ createApp({
       goToArena, goToDebate,
       // helpers
       AGENT_META, formatBytes, timeAgo,
+      marked,
     };
   },
 
@@ -732,7 +733,14 @@ createApp({
               <div class="transcript-who" :class="entry.agent">
                 {{ entry.name }} · Round {{ Math.floor(i / selectedAgents.length) + 1 }}
               </div>
-              <div class="transcript-text">{{ entry.text }}</div>
+              <div class="transcript-text">
+                {{ entry.expanded ? entry.text : entry.text.slice(0, 200) + (entry.text.length > 200 ? '...' : '') }}
+                <button v-if="entry.text.length > 200" 
+                        @click="entry.expanded = !entry.expanded"
+                        style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:12px;padding:4px 0 0 0;display:block">
+                  {{ entry.expanded ? 'Show less' : 'Read more' }}
+                </button>
+              </div>
             </div>
           </div>
 
