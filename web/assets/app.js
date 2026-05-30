@@ -339,13 +339,13 @@ createApp({
               text: t.text,
             }));
           }
-          setTimeout(() => pollJob(jobId), 1500);
+          setTimeout(() => pollJob(jobId), 500);
           return;
         }
 
         if (job.status === "queued") {
           jobMsg.value = "Queued...";
-          setTimeout(() => pollJob(jobId), 1500);
+          setTimeout(() => pollJob(jobId), 500);
           return;
         }
 
