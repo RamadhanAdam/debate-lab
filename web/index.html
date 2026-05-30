@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Debate Lab</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+  <link rel="stylesheet" href="/assets/styles.css">
+</head>
+
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="mark">DL</div>
+        <div>
+          <h1>Debate Lab</h1>
+          <p>Multi-model review console</p>
+        </div>
+      </div>
+
+      <div class="panel compact">
+        <div class="panel-head">
+          <h2>Run</h2>
+          <button id="refreshBtn" class="icon-btn" title="Refresh">↻</button>
+        </div>
+        <label>
+          Topic
+          <input id="topicInput" type="text" placeholder="Review and critique the input files">
+        </label>
+        <div class="row">
+          <label>
+            Mode
+            <select id="modeSelect">
+              <option value="review">review</option>
+              <option value="debate">debate</option>
+            </select>
+          </label>
+          <label>
+            Rounds
+            <input id="roundsInput" type="number" min="1" max="5" value="1">
+          </label>
+        </div>
+        <div>
+          <span class="label-text">Agents</span>
+          <div id="agentChecks" class="checks"></div>
+        </div>
+        <button id="runBtn" class="primary-btn">Run Debate</button>
+        <div id="jobStatus" class="status idle">Ready</div>
+      </div>
+
+      <div class="panel files">
+        <div class="panel-head">
+          <h2>Inputs</h2>
+          <span id="fileCount" class="pill">0</span>
+        </div>
+        <div id="inputFiles" class="file-list"></div>
+      </div>
+    </aside>
+
+    <main class="workspace">
+      <section class="editor-band">
+        <div class="editor-head">
+          <div>
+            <h2>Input Draft</h2>
+            <p>Saved into <code>input/web_brief.md</code></p>
+          </div>
+          <button id="saveInputBtn" class="secondary-btn">Save Input</button>
+        </div>
+        <textarea id="inputEditor" spellcheck="true"># Research Brief
+
+Paste a proposal, paper section, experiment result, code review target, or claim here.
+
+The agents will read this file, debate it, score the arguments, and save a report.</textarea>
+      </section>
+
+      <section class="results-grid">
+        <div class="panel report-panel">
+          <div class="panel-head">
+            <h2>Latest Report</h2>
+            <select id="reportSelect"></select>
+          </div>
+          <div id="reportMeta" class="meta-line">No report loaded</div>
+          <div id="reportView" class="report-view"></div>
+        </div>
+
+        <div class="stack">
+          <div class="panel">
+            <div class="panel-head">
+              <h2>Summary</h2>
+              <span id="resultMode" class="pill">-</span>
+            </div>
+            <div id="summaryBox" class="summary-box muted">Run a debate to see the moderator summary.</div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <h2>Scores</h2>
+              <span id="scoreCount" class="pill">0</span>
+            </div>
+            <div id="scoresBox" class="score-list muted">No scores yet.</div>
+          </div>
+
+          <div class="panel">
+            <div class="panel-head">
+              <h2>Warnings</h2>
+              <span id="warningCount" class="pill">0</span>
+            </div>
+            <div id="warningsBox" class="warning-list muted">No warnings.</div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="/assets/app.js"></script>
+</body>
+
+</html>

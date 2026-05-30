@@ -1,0 +1,12 @@
+.env
+node_modules
+.env
+node_modules
+__pycache__
+*.pyc
+q_table.json
+input/
+debates/
+reviews/
+venv/
+.conda/
