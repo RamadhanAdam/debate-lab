@@ -42,7 +42,7 @@ ROUNDS = 3  # Number of debate rounds
 MAX_TURNS = 5  # Max turns per round
 TIME_LIMIT = 60  # Time limit per turn in seconds
 
-MODES = ["review", "debate"]  # Available modes of operation
+MODES = ["review", "debate", "business", "creative", "technical"]  # Available modes of operation
 DEFAULT_MODE = "review"  
 
 

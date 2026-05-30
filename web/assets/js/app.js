@@ -481,7 +481,7 @@ createApp({
   </aside>
 
   <main class="main-content">
-    <button class="btn btn-ghost btn-icon hamburger" style="position:absolute;top:12px;left:12px;z-index:20" @click="toggleSidebar" v-if="page !== 'arena'">
+    <button class="btn btn-ghost btn-icon hamburger" style="position:absolute;top:12px;left:12px;z-index:100" @click="toggleSidebar" v-if="page !== 'arena'">
       <svg><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
     </button>
 
@@ -542,7 +542,7 @@ createApp({
 
     <!-- Arena -->
     <div v-if="page === 'arena'" class="arena-layout">
-      <button class="btn btn-ghost btn-icon hamburger" style="position:absolute;top:12px;left:12px;z-index:20" @click="toggleSidebar">
+      <button class="btn btn-ghost btn-icon hamburger" style="position:absolute;top:12px;left:12px;z-index:100" @click="toggleSidebar">
         <svg><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
       </button>
       
@@ -567,8 +567,7 @@ createApp({
           </div>
 
           <div v-for="(entry, i) in transcript" :key="i" class="chat-bubble-row" :class="{human: entry.agent === 'human'}">
-            <div class="chat-avatar" :style="{background: AGENT_META[entry.agent]?.color}">
-              {{ AGENT_META[entry.agent]?.initials }}
+            <div class="chat-avatar" :style="{background: AGENT_META[entry.agent]?.color}" v-html="AGENT_META[entry.agent]?.icon || AGENT_META[entry.agent]?.initials">
             </div>
             <div class="chat-bubble-content">
               <div class="chat-agent-name">{{ entry.name }}</div>
@@ -577,7 +576,7 @@ createApp({
           </div>
 
           <div v-if="interjecting" class="chat-bubble-row human">
-            <div class="chat-avatar" :style="{background: AGENT_META.human.color}">{{ AGENT_META.human.initials }}</div>
+            <div class="chat-avatar" :style="{background: AGENT_META.human.color}" v-html="AGENT_META.human.icon || AGENT_META.human.initials"></div>
             <div class="chat-bubble-content">
               <div class="chat-agent-name">Your Turn</div>
               <div class="chat-bubble human" style="width:100%;max-width:500px">
@@ -592,8 +591,7 @@ createApp({
           </div>
 
           <div v-if="speakingAgent && jobStatus === 'running' && !interjecting" class="chat-bubble-row">
-            <div class="chat-avatar" :style="{background: AGENT_META[speakingAgent]?.color}">
-              {{ AGENT_META[speakingAgent]?.initials }}
+            <div class="chat-avatar" :style="{background: AGENT_META[speakingAgent]?.color}" v-html="AGENT_META[speakingAgent]?.icon || AGENT_META[speakingAgent]?.initials">
             </div>
             <div class="chat-bubble-content">
               <div class="chat-agent-name">{{ AGENT_META[speakingAgent]?.name }}</div>
@@ -604,7 +602,7 @@ createApp({
           </div>
 
           <div v-if="humanTurn && !interjecting" class="chat-bubble-row human">
-            <div class="chat-avatar" :style="{background: AGENT_META.human.color}">{{ AGENT_META.human.initials }}</div>
+            <div class="chat-avatar" :style="{background: AGENT_META.human.color}" v-html="AGENT_META.human.icon || AGENT_META.human.initials"></div>
             <div class="chat-bubble-content">
               <div class="chat-agent-name">Your Turn</div>
               <div class="chat-bubble human" style="width:100%;max-width:500px">
@@ -659,6 +657,9 @@ createApp({
             <select v-model="mode">
               <option value="review">Review</option>
               <option value="debate">Debate</option>
+              <option value="business">Business</option>
+              <option value="creative">Creative</option>
+              <option value="technical">Technical</option>
             </select>
           </div>
           <div class="field">
