@@ -9,7 +9,6 @@ export function useArena(state) {
       return;
     }
 
-    // Save draft first if any
     if (state.saveDraft) await state.saveDraft();
 
     state.jobStatus.value = "running";
@@ -27,7 +26,7 @@ export function useArena(state) {
     state.humanTurn.value = false;
     state.interjecting.value = false;
 
-    try:
+    try {
       const data = await runDebateReq({
         topic: state.topic.value || null,
         mode: state.mode.value,
@@ -54,7 +53,6 @@ export function useArena(state) {
         state.humanTurn.value = true;
         state.interjecting.value = false;
         
-        // Ensure transcript is updated
         if (job.transcript && job.transcript.length) {
             state.transcript.value = job.transcript.map(t => ({
               agent: Object.keys(AGENT_META).find(k => AGENT_META[k].name === t.agent) || "groq",
@@ -62,7 +60,7 @@ export function useArena(state) {
               text: t.text,
               expanded: true,
             }));
-            state.speakingAgent.value = null; // No one is speaking while waiting
+            state.speakingAgent.value = null;
         }
 
         setTimeout(() => pollJob(jobId), 2000);
@@ -100,7 +98,6 @@ export function useArena(state) {
         return;
       }
 
-      // Completed
       state.jobStatus.value = "completed";
       state.jobMsg.value = "Analysis complete";
       state.arenaActive.value = false;
@@ -120,7 +117,6 @@ export function useArena(state) {
   async function submitHuman() {
     if (!state.currentJobId.value) return;
     
-    // Optimistically update UI
     state.humanTurn.value = false;
     const text = state.humanInput.value.trim();
     if (text) {
@@ -137,14 +133,12 @@ export function useArena(state) {
         await submitHumanInputReq(state.currentJobId.value, text);
     } catch (e) {
         console.error("Failed to submit human input:", e);
-        // Error will be caught by pollJob eventually, or we could add a toast here
     }
   }
 
   async function submitInterject() {
     if (!state.currentJobId.value) return;
     
-    // Optimistically update UI
     state.interjecting.value = false;
     const text = state.humanInput.value.trim();
     if (text) {
@@ -184,7 +178,6 @@ export function useArena(state) {
     state.totalRounds.value = result.rounds || 1;
     state.currentRound.value = result.rounds || 1;
 
-    // Build transcript from all rounds
     if (result.rounds_data && result.rounds_data.length && state.transcript.value.length === 0) {
       for (const round of result.rounds_data) {
         for (const [agentName, argument] of round) {

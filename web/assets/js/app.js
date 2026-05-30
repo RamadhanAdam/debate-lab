@@ -13,7 +13,7 @@ const { createApp, ref, computed, onMounted, watch } = window.Vue;
 
 createApp({
   setup() {
-    // ── State ──
+    // State
     const user = ref(null);
     const authChecked = ref(false);
     const page = ref("dashboard"); 
@@ -114,7 +114,7 @@ createApp({
     const chatInput = ref("");
     const chatLoading = ref(false);
 
-    // ── Functions ──
+    // Functions
 
     async function emailSignIn() {
       loginLoading.value = true;
@@ -277,7 +277,7 @@ createApp({
       } catch (e) { addToast("Clone Failed", e.message, "error"); }
     }
 
-    // ── Arena Setup ──
+    // Arena Setup
     const arenaState = {
       selectedAgents, jobMsg, jobStatus, saveDraft, arenaActive, reportSaved,
       transcript, agentScores, warnings, summary, reportContent, currentRound,
@@ -303,7 +303,7 @@ createApp({
       sidebarOpen.value = false;
     }
 
-    // ── Reports & History ──
+    // Reports & History
     async function loadReportsData() {
       try {
         const data = await fetchReports();
@@ -390,7 +390,6 @@ createApp({
     };
   },
   template: `
-<!-- Toasts -->
 <div class="toast-container">
   <div v-for="t in toasts" :key="t.id" class="toast" :class="t.type">
     <div class="toast-title">{{ t.title }}</div>
@@ -403,7 +402,6 @@ createApp({
   <div style="text-align:center;color:var(--ink2)">Loading...</div>
 </div>
 
-<!-- Login -->
 <div v-else-if="page === 'login'" class="login-page">
   <div class="login-bg"></div>
   <div class="login-card">
@@ -434,7 +432,6 @@ createApp({
   </div>
 </div>
 
-<!-- Onboarding -->
 <div v-else-if="page === 'onboarding'" class="onboarding-page">
   <div class="login-bg"></div>
   <div class="login-card" style="grid-template-columns:1fr;max-width:600px;gap:32px">
@@ -459,7 +456,6 @@ createApp({
   </div>
 </div>
 
-<!-- App Shell -->
 <div v-else class="app-shell">
   <div class="overlay" :class="{show: sidebarOpen}" @click="sidebarOpen=false"></div>
   <aside class="sidebar" :class="{open: sidebarOpen, collapsed: sidebarCollapsed}">
@@ -486,7 +482,7 @@ createApp({
            class="btn btn-ghost nav-item" style="font-size:12px;padding:8px 12px;font-weight:400" :title="s.topic">
         <svg v-if="sidebarCollapsed"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
         <span v-if="!sidebarCollapsed" class="nav-label" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.topic || 'Untitled' }}</span>
-      </div>
+      </button>
       <div style="flex:1"></div>
       <button class="btn btn-ghost nav-item" :class="{active: page==='settings'}" @click="page='settings'; sidebarOpen=false">
         <svg><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
@@ -520,7 +516,6 @@ createApp({
       <svg><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
     </button>
 
-    <!-- Dashboard -->
     <div v-if="page === 'dashboard'" class="page">
       <h1 style="font-size:28px;font-weight:800;margin-bottom:8px">Dashboard</h1>
       <p style="color:var(--ink2);margin-bottom:32px">Welcome back. Here's how your agents are performing.</p>
@@ -575,7 +570,6 @@ createApp({
       </div>
     </div>
 
-    <!-- Arena -->
     <div v-if="page === 'arena'" class="arena-layout">
       <button class="btn btn-ghost btn-icon hamburger" style="position:absolute;top:12px;left:12px;z-index:100" @click="toggleSidebar">
         <svg><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
@@ -785,7 +779,6 @@ createApp({
       </aside>
     </div>
 
-    <!-- History -->
     <div v-if="page === 'history'" class="page">
       <h1 style="font-size:28px;font-weight:800;margin-bottom:8px">History</h1>
       <p style="color:var(--ink2);margin-bottom:32px">Review past debates and analyses.</p>
@@ -840,7 +833,6 @@ createApp({
       </div>
     </div>
 
-    <!-- Settings -->
     <div v-if="page === 'settings'" class="page">
       <h1 style="font-size:28px;font-weight:800;margin-bottom:8px">Settings</h1>
       <p style="color:var(--ink2);margin-bottom:32px">Manage your API keys and preferences.</p>
@@ -913,7 +905,6 @@ createApp({
       </div>
     </div>
     
-    <!-- Resources Hub -->
     <div v-if="page === 'help'" class="page">
       <h1 style="font-size:28px;font-weight:800;margin-bottom:8px">Resources & Documentation</h1>
       <p style="color:var(--ink2);margin-bottom:32px">Master the art of multi-model analysis.</p>
@@ -943,19 +934,19 @@ createApp({
             <div class="debate-card" style="cursor:default" @click="topic='Review the security and scalability of this codebase. Find at least 3 critical vulnerabilities.'">
                 <div class="debate-card-body">
                     <div class="debate-card-topic">🛡️ Security Auditor</div>
-                    <div class="debate-card-meta">"Review the security and scalability of this codebase. Find at least 3 critical vulnerabilities."</div>
+                    <div class="debate-card-meta">'Review the security and scalability of this codebase. Find at least 3 critical vulnerabilities.'</div>
                 </div>
             </div>
             <div class="debate-card" style="cursor:default" @click="topic='Critique this business plan from a VC perspective. Be harsh about the unit economics and market fit.'">
                 <div class="debate-card-body">
                     <div class="debate-card-topic">💰 VC Pitch Roaster</div>
-                    <div class="debate-card-meta">"Critique this business plan from a VC perspective. Be harsh about the unit economics and market fit."</div>
+                    <div class="debate-card-meta">'Critique this business plan from a VC perspective. Be harsh about the unit economics and market fit.'</div>
                 </div>
             </div>
             <div class="debate-card" style="cursor:default" @click="topic='Summarize the key findings of this paper and identify any data that contradicts the authors conclusion.'">
                 <div class="debate-card-body">
                     <div class="debate-card-topic">🔬 Academic Peer Review</div>
-                    <div class="debate-card-meta">"Summarize the key findings of this paper and identify any data that contradicts the authors conclusion."</div>
+                    <div class="debate-card-meta">'Summarize the key findings of this paper and identify any data that contradicts the authors conclusion.'</div>
                 </div>
             </div>
           </div>
@@ -964,11 +955,11 @@ createApp({
         <div class="panel">
           <h2>System Architecture</h2>
           <div style="margin-top:20px;background:rgba(0,0,0,0.2);padding:20px;border-radius:12px;font-family:monospace;font-size:12px;white-space:pre;overflow-x:auto">
-[Your Browser] --- (Encrypted Keys) ---> [FastAPI Server]
+[Your Browser] --- (Encrypted Keys) ---&gt; [FastAPI Server]
       |                                     |
       | (Polling)                           | (Orchestration)
       v                                     v
-[UI Progress] <--- (Job Stats) --- [Agents Loop (RL Sorted)]
+[UI Progress] &lt;--- (Job Stats) --- [Agents Loop (RL Sorted)]
                                             |
                                   +---------+---------+
                                   |         |         |
