@@ -74,6 +74,7 @@ createApp({
     const agentStats = ref([]);
     const loadingDebates = ref(false);
     const historySearch = ref("");
+    const selectedReports = ref([]);
 
     // Arena State
     const topic = ref("");
@@ -329,6 +330,36 @@ createApp({
       addToast("Deleted", "Report removed", "info");
     }
 
+    async function deleteSelectedReports() {
+      if (!selectedReports.value.length) return;
+      if (!confirm(`Delete ${selectedReports.value.length} reports?`)) return;
+      for (const name of selectedReports.value) {
+        await deleteReportReq(name);
+      }
+      selectedReports.value = [];
+      await loadReportsData();
+      await loadDashboard();
+      addToast("Deleted", "Selected reports removed", "info");
+    }
+
+    function toggleSelectAll() {
+      if (selectedReports.value.length === filteredReports.value.length) {
+        selectedReports.value = [];
+      } else {
+        selectedReports.value = filteredReports.value.map(r => r.name);
+      }
+    }
+
+    async function deleteAccount() {
+      if (!confirm("PERMANENTLY DELETE ACCOUNT? This cannot be undone.")) return;
+      try {
+        await api("/auth/delete-account", { method: "DELETE" });
+        window.location.href = "/auth/logout";
+      } catch (e) {
+        addToast("Error", "Failed to delete account", "error");
+      }
+    }
+
     function goToHistory(item) {
       if (item && item.name) loadReport(item.name);
       else if (item && item.id) {
@@ -376,14 +407,14 @@ createApp({
       sidebarOpen, toggleSidebar, sidebarCollapsed, toggleSidebarCollapse, toasts,
       loginEmail, loginPassword, loginMode, loginLoading, emailSignIn, emailRegister,
       onboardName, onboardAvatarColor, onboardDone, completeOnboarding,
-      profileName, profileAvatarColor, keys, keysStatus, sessionOnlyKeys, saveLocalKeys, validateKey,
-      debates, sessions, agentStats, loadingDebates, historySearch,
+      profileName, profileAvatarColor, keys, keysStatus, sessionOnlyKeys, saveLocalKeys, validateKey, deleteAccount,
+      debates, sessions, agentStats, loadingDebates, historySearch, selectedReports,
       topic, mode, goal, persona, rounds, selectedAgents, toggleAgent,
       jobStatus, jobMsg, currentJobId, arenaActive, configOpen, reportSaved, currentRound, totalRounds,
       speakingAgent, transcript, agentScores, warnings, summary, resultMode, humanTurn, humanInput, interjecting,
       runDebate, saveReport, submitHuman, submitInterject, downloadReport,
       inputFiles, draftContent, deleteInputFileObj, clearAllInputs, uploadFile, cloneUrl, cloneRepo,
-      reports, filteredReports, selectedReport, reportContent, reportHtml, loadReport, deleteReport,
+      reports, filteredReports, selectedReport, reportContent, reportHtml, loadReport, deleteReport, deleteSelectedReports, toggleSelectAll,
       chatMessages, chatInput, chatLoading, sendChat,
       goToArena, goToHistory,
       AGENT_META, formatBytes, timeAgo, marked
@@ -428,6 +459,21 @@ createApp({
       </div>
       <button class="btn btn-primary btn-full" @click="emailSignIn" :disabled="loginLoading">Sign In</button>
       <button class="btn btn-ghost btn-full" @click="emailRegister" :disabled="loginLoading">Create Account</button>
+      
+      <div class="login-features" style="margin-top:24px;border-top:1px solid var(--glass-border);padding-top:24px">
+          <div style="display:flex;gap:12px;margin-bottom:16px">
+              <svg style="color:var(--accent);flex-shrink:0"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+              <div style="font-size:12px"><strong>Three AI Professors</strong><br><span class="muted">Top-tier models analyze your work from unique angles.</span></div>
+          </div>
+          <div style="display:flex;gap:12px;margin-bottom:16px">
+              <svg style="color:var(--success);flex-shrink:0"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11"/></svg>
+              <div style="font-size:12px"><strong>Scored Arguments</strong><br><span class="muted">Every point is graded on evidence, logic, and impact.</span></div>
+          </div>
+          <div style="display:flex;gap:12px">
+              <svg style="color:var(--warning);flex-shrink:0"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 1 1-7.6-11.7 8.5 8.5 0 0 1 8.5 7.9z"/><path d="M12 8v4l3 3"/></svg>
+              <div style="font-size:12px"><strong>Real-time Interjection</strong><br><span class="muted">Pause the debate at any time to steer the conversation.</span></div>
+          </div>
+      </div>
     </div>
   </div>
 </div>
@@ -478,11 +524,11 @@ createApp({
       </button>
       <div style="height:1px;background:var(--glass-border);margin:8px 12px"></div>
       <div v-if="!sidebarCollapsed" class="nav-label muted" style="padding:0 12px;font-size:11px;font-weight:700;margin-top:8px">RECENT</div>
-      <div v-for="s in sessions.slice(0,5)" :key="s.id" @click="goToHistory(s)"
+      <div v-for="s in sessions.slice(0,8)" :key="s.id" @click="goToHistory(s)"
            class="btn btn-ghost nav-item" style="font-size:12px;padding:8px 12px;font-weight:400" :title="s.topic">
         <svg v-if="sidebarCollapsed"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
         <span v-if="!sidebarCollapsed" class="nav-label" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ s.topic || 'Untitled' }}</span>
-      </button>
+      </div>
       <div style="flex:1"></div>
       <button class="btn btn-ghost nav-item" :class="{active: page==='settings'}" @click="page='settings'; sidebarOpen=false">
         <svg><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
@@ -809,14 +855,25 @@ createApp({
 
       <div class="panel">
         <div class="panel-head">
-          <input v-model="historySearch" type="text" placeholder="Search topics..." style="max-width:300px">
+          <div style="display:flex;gap:12px;align-items:center;flex:1">
+            <input v-model="historySearch" type="text" placeholder="Search topics..." style="max-width:300px">
+            <button class="btn btn-danger btn-sm" v-if="selectedReports.length" @click="deleteSelectedReports">
+                Delete Selected ({{ selectedReports.length }})
+            </button>
+          </div>
         </div>
         <div class="table-wrapper">
           <table class="data-table">
-            <thead><tr><th>Topic</th><th>Mode</th><th>Date</th><th>Actions</th></tr></thead>
+            <thead>
+                <tr>
+                    <th style="width:40px"><input type="checkbox" @click="toggleSelectAll" :checked="selectedReports.length === filteredReports.length && filteredReports.length > 0"></th>
+                    <th>Topic</th><th>Mode</th><th>Date</th><th>Actions</th>
+                </tr>
+            </thead>
             <tbody>
-              <tr v-if="!filteredReports.length"><td colspan="4" style="text-align:center;padding:32px;color:var(--ink2)">No reports found.</td></tr>
+              <tr v-if="!filteredReports.length"><td colspan="5" style="text-align:center;padding:32px;color:var(--ink2)">No reports found.</td></tr>
               <tr v-for="r in filteredReports" :key="r.id">
+                <td><input type="checkbox" v-model="selectedReports" :value="r.name"></td>
                 <td style="font-weight:600">{{ r.topic || r.name }}</td>
                 <td><span class="pill">{{ r.mode }}</span></td>
                 <td>{{ timeAgo(r.created_at || Date.now()) }}</td>
@@ -902,6 +959,12 @@ createApp({
             <a href="/auth/logout" class="btn btn-secondary" style="margin-left:auto">Sign Out</a>
           </div>
         </div>
+
+        <div class="panel" style="border-color:rgba(218,54,51,0.3)">
+          <div class="panel-head"><h2 style="color:var(--danger)">Danger Zone</h2></div>
+          <p class="muted" style="font-size:13px;margin-bottom:20px">Deleting your account will permanently remove all your debate history and saved API keys.</p>
+          <button class="btn btn-danger" @click="deleteAccount">Delete Account Permanently</button>
+        </div>
       </div>
     </div>
     
@@ -968,6 +1031,35 @@ createApp({
           <p style="margin-top:16px;font-size:14px;line-height:1.6;color:var(--ink2)">
             Debate Lab uses a Reinforcement Learning (RL) engine to track which models produce the most logically sound and specific arguments. Over time, the best models are automatically moved to the "Rebuttal" phase of the debate to provide the highest quality counters.
           </p>
+        </div>
+
+        <div class="panel">
+          <h2>Keyboard Shortcuts</h2>
+          <div class="table-wrapper" style="margin-top:16px">
+            <table class="data-table">
+              <thead><tr><th>Action</th><th>Shortcut</th></tr></thead>
+              <tbody>
+                <tr><td>Run Analysis</td><td><code>Cmd + Enter</code></td></tr>
+                <tr><td>Close Config Panel</td><td><code>Esc</code></td></tr>
+                <tr><td>Focus Topic Input</td><td><code>Cmd + K</code></td></tr>
+                <tr><td>Toggle Theme</td><td><code>Cmd + T</code></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="panel">
+          <h2>Frequently Asked Questions</h2>
+          <div style="display:grid;gap:20px;margin-top:16px">
+            <div>
+              <div style="font-weight:700;margin-bottom:4px">Are my API keys safe?</div>
+              <div class="muted" style="font-size:13px">Yes. Keys are stored locally in your browser. If you enable "Session-Only" mode, they are deleted automatically when you close the tab.</div>
+            </div>
+            <div>
+              <div style="font-weight:700;margin-bottom:4px">How many agents can I run at once?</div>
+              <div class="muted" style="font-size:13px">You can run up to all 6 models simultaneously, plus your own "Human" interjections.</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
