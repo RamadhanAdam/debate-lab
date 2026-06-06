@@ -15,7 +15,7 @@ docstring_parser==0.18.0
 ecdsa==0.19.2
 fastapi==0.136.3
 fsspec==2026.4.0
-github-copilot-sdk==0.3.0
+github-copilot-sdk==1.0.0
 google-ai-generativelanguage==0.11.0
 google-api-core==2.30.3
 google-api-python-client==2.197.0
