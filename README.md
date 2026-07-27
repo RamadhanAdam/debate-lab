@@ -1,102 +1,369 @@
 # Debate Lab
 
-**Drop in any work. Get multiple AI analysts tearing it apart.**
+Debate Lab is a multi-agent debate and review workspace. It loads files from disk, lets you clone GitHub repositories into a project folder, runs several models against the same material, and saves a structured markdown report with a transcript, scores, warnings, and a moderator summary.
 
-![Python](https://img.shields.io/badge/Python-3.11+-blue)
-![JavaScript](https://img.shields.io/badge/JavaScript-Vue.js-green)
-![License](https://img.shields.io/badge/License-Commercial-red)
+The project has two primary entry points:
 
-Debate Lab is a multi-agent debate system where top-tier AI models argue about the same material from different angles. It includes a beautiful Glass UI and a Q-learning reward system that tracks argument quality over time and learns which model argues best.
+- `debate.py` for command-line runs
+- `web_app.py` for the browser UI
 
----
+Both use the same debate engine and the same `input/` and `debates/` directories.
 
-## 🚀 What It Does
+## What It Does
 
-You provide context (research papers, codebases, business plans, or raw data) by dropping files into the UI or pasting a GitHub repository URL. The models read it and debate in three rounds:
+The workflow is simple:
 
-1. **Independent Assessment**: Each model provides a rigorous, simultaneous peer review.
-2. **Rebuttal**: Models read each other's assessments, quoting specific points to agree or push back.
-3. **Synthesis**: Models provide final, actionable recommendations.
+1. Add source material to `input/` or create a folder through the web UI.
+2. Choose one or more agents.
+3. Run a review or debate across several rounds.
+4. Review the transcript, warnings, and scores.
+5. Save the result as a markdown artifact in `debates/`.
 
-You can also participate as a "Human" agent, injecting your own arguments into the debate in real-time using the **Interject** feature!
+The app is useful for:
 
----
+- research critique
+- code review
+- proposal review
+- product reasoning
+- security analysis
+- structured brainstorming
 
-## 🤖 Supported Models
+The web UI also supports human interjection during a live run, so you can steer the conversation while it is still in progress.
 
-Debate Lab natively supports 6 leading LLMs via their respective APIs. You only need API keys for the ones you want to use.
+## Repository Layout
 
-| Agent | Model | Provider | Required API Key |
-|-------|-------|----------|-------------------|
-| GPT | GPT-4.1 | GitHub Copilot SDK | *(Copilot Auth)* |
-| Llama | Llama-3.3-70b | Groq | `GROQ_API_KEY` |
-| Gemini | Gemini 2.0 Flash Lite | Google AI | `GOOGLE_API_KEY` |
-| Claude | Claude 3.5 Haiku | Anthropic | `ANTHROPIC_API_KEY` |
-| DeepSeek | DeepSeek Chat | DeepSeek | `DEEPSEEK_API_KEY` |
-| Kimi | Moonshot-v1-8k | Moonshot AI | `KIMI_API_KEY` |
+```text
+README.md
+agents.py               Provider wrappers for the models
+debate.py               Debate orchestration and artifact generation
+debate_config.py        Central settings, model names, directories, and scoring config
+reward.py               Argument scoring and Q-table persistence
+web_app.py              Browser app server and route handlers
+web/
+  index.html
+  assets/
+    js/                 Vue application, API helpers, arena logic
+    css/                Layout, component, and arena styles
+input/                  Shared input files and per-user folders
+debates/                Saved markdown reports
+q_table.json            Persistent learning state for the scorer
+```
 
-*Note: API keys are stored securely in your browser's local storage and only sent to the server when a debate is run.*
+## Supported Agents
 
----
+The exact model strings live in `debate_config.py`, but the project currently supports these agent types:
 
-## 💻 Installation & Quick Start
+| Agent | Provider | Notes |
+|---|---|---|
+| GPT | GitHub Copilot SDK | Uses GitHub-based auth |
+| Groq | Groq | Used heavily for debate and moderation |
+| Gemini | Google | Optional and quota-dependent |
+| Claude | Anthropic | Optional |
+| DeepSeek | DeepSeek | Optional |
+| Kimi | Moonshot | Optional |
+| Human | Local user | Optional live participation |
 
-**1. Clone and Install**
-\`\`\`bash
-git clone https://github.com/RamadhanAdam/copilot-sdk-agents
-cd copilot-sdk-agents
+You can run only the providers you have configured. For example, `--agents groq` is a valid low-cost smoke test.
+
+## Requirements
+
+You will need:
+
+- Python 3.11 or newer
+- Git
+- a modern browser
+- a Supabase project
+- GitHub OAuth credentials
+- API keys for any providers you want to use
+
+## Installation
+
+```bash
+git clone https://github.com/RamadhanAdam/debate-lab
+cd debate-lab
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-\`\`\`
+```
 
-**2. Environment Variables**
-Copy `.env.example` to `.env` and fill in your Supabase credentials (required for user authentication and history saving), and your GitHub OAuth credentials.
+## Environment Variables
 
-**3. Run the Web Server**
-\`\`\`bash
+Create a `.env` file in the project root.
+
+### Required for the web app
+
+```bash
+SUPABASE_URL=...
+SUPABASE_SERVICE_KEY=...
+SUPABASE_ANON_KEY=...
+GITHUB_CLIENT_ID=...
+GITHUB_CLIENT_SECRET=...
+SESSION_SECRET=...
+```
+
+### Optional provider keys
+
+```bash
+GROQ_API_KEY=...
+GOOGLE_API_KEY=...
+KIMI_API_KEY=...
+DEEPSEEK_API_KEY=...
+ANTHROPIC_API_KEY=...
+```
+
+The app reads these through `debate_config.py` and `web_app.py`. If a required variable is missing, the server now fails fast with a clear startup error.
+
+## Running the Web App
+
+Start the server:
+
+```bash
 uvicorn web_app:app --host 127.0.0.1 --port 8765 --reload
-\`\`\`
-Open `http://127.0.0.1:8765` in your browser.
+```
 
----
+Then open:
 
-## 🏗️ System Architecture
+```text
+http://127.0.0.1:8765
+```
 
-Debate Lab uses a modular architecture:
-- **Frontend (`web/`)**: A modular Vue 3 application using native ES imports (`assets/js/app.js`, `api.js`, etc.) and a custom Glass UI CSS framework.
-- **Backend (`web_app.py`)**: A FastAPI server handling GitHub OAuth, Supabase database connections, file management, and long-running job threads.
-- **Orchestrator (`debate.py`)**: Manages the round-robin logic, context windows, and real-time human interjections.
-- **Agents (`agents.py`)**: Abstracted wrappers around the official SDKs (OpenAI, Anthropic, Google, Groq).
-- **RL Engine (`reward.py`)**: Uses a Q-learning matrix to score arguments via a judge LLM, actively sorting the best-performing agents to speak last in future rounds.
+Web features:
 
----
+- GitHub OAuth login
+- email sign-in, account creation, and password recovery
+- per-user input folders
+- file upload
+- folder creation
+- GitHub repository cloning
+- live debate runs
+- human interjection
+- report export
+- report history
+- report chat with either a Groq-backed assistant or a local report-grounded fallback when no chat key is configured
+- save chat conversations into your workspace's conversations area
+- top-right account menu for profile settings, theme, and logout
+- account deletion
+- configurable profile name, gender, pronouns, avatar style, and avatar accent
 
-## 🔌 Adding New Agents
+Email login uses one shared email field with separate modes for sign-in, account creation, and password recovery. Recovery sends a reset email and shows resend status in the UI. The GitHub button still goes through the OAuth flow.
 
-Debate Lab is highly extensible. To add a new model:
+The UI stores avatar and profile details in the authenticated user profile and falls back to a generated avatar when a GitHub image is not available.
 
-1. Add your API key to `.env` and load it in `debate_config.py`.
-2. Add the agent to the `AGENTS` mapping in `debate_config.py`.
-3. In `agents.py`, create a class inheriting from `BaseAgent` and implement the `argue()` method using your provider's SDK.
-4. Add the new class to the `get_agent()` factory function in `agents.py`.
-5. Finally, update `AGENT_META` in `web/assets/js/constants.js` with initials and a custom color for the frontend UI.
+## Running the CLI
 
----
+The CLI is the easiest way to test the debate engine itself.
 
-## 🐳 Docker Deployment
+```bash
+python3 -u debate.py --no-human
+```
 
-To deploy to a cloud provider like HuggingFace Spaces or AWS:
+Helpful examples:
 
-\`\`\`bash
-docker build -t debate-lab .
-docker run -p 7860:7860 --env-file .env debate-lab
-\`\`\`
+```bash
+python3 -u debate.py --rounds 1 --agents groq --no-human
+python3 -u debate.py --rounds 2 --agents gpt,groq --no-human
+python3 -u debate.py --mode debate --topic "Should AI debate before acting?" --rounds 3
+```
 
-*Note: Ensure you mount volumes for `/app/input`, `/app/debates`, and `/app/q_table.json` if you want local artifacts to persist across container restarts.*
+CLI flags:
 
----
+- `--topic`: custom prompt or topic
+- `--mode`: `review`, `debate`, `business`, `creative`, or `technical`
+- `--no-human`: disable the human turn
+- `--agents`: comma-separated agent list
+- `--rounds`: number of rounds
 
-## 📝 License
+## Input Files
 
-This software is provided under a Commercial/Proprietary license. See `LICENSE` for more details.
+Supported file types:
+
+- `.txt`
+- `.md`
+- `.py`
+- `.ts`
+- `.js`
+- `.json`
+- `.csv`
+- `.docx`
+- `.pptx`
+- `.xlsx`
+
+The app reads files recursively from the current user folder:
+
+- web app runs use each signed-in user's private workspace
+- CLI runs without a user use the shared workspace folder
+
+You can create nested project folders such as:
+
+```text
+input/
+  sample_proposal.md
+  research-notes/
+    round-1.md
+    draft-context.md
+```
+
+Those folders are shown in the UI and can be created directly from the sidebar.
+
+## Output Artifacts
+
+Each run saves a markdown report in `debates/`. Reports now include:
+
+- executive summary
+- round-by-round transcript
+- run warnings
+- argument scores
+- agent averages
+
+The web app also stores report metadata in Supabase so history can be queried later.
+
+## Web UI Workflow
+
+The main screen is split into three parts:
+
+- left sidebar for navigation and profile
+- center arena for the transcript and summary
+- right panel for configuration and input management
+
+Common actions:
+
+- switch between dashboard, arena, history, and settings
+- collapse the sidebar from the top-left control
+- open the top-right account menu for profile settings and logout
+- select agents with provider icons
+- create a project folder
+- upload files or clone a GitHub repository
+- run the debate
+- save the report
+- chat with the saved report later
+
+## Documentation
+
+The detailed guides live in the `docs/` folder and are also exposed in the app's Resources page and standalone docs site at `/docs`.
+
+- [Getting Started](/docs/getting-started)
+- [Web UI Guide](/docs/web-ui)
+- [Workspace Guide](/docs/workspace)
+- [CLI Reference](/docs/cli)
+- [Agent Guide](/docs/agents)
+- [Profile and Avatar Guide](/docs/profiles)
+- [Security Notes](/docs/security)
+
+## Security Notes
+
+The project includes several protections:
+
+- path input is sanitized before files or folders are created
+- deletions stay inside the current user folder
+- GitHub clone URLs are restricted to GitHub hosts
+- job polling no longer serializes internal lock objects
+- environment variables are validated at startup
+- account deletion clears user content and profile metadata
+- API keys default to session-only browser storage, and sign-out clears saved keys
+- auth, chat, and repository clone routes are rate-limited server-side
+- report and chat markdown is escaped before rendering so user content cannot inject HTML
+- GitHub OAuth uses state verification, HTTP-only session cookies, and an explicit callback route
+- the web app sends a Content Security Policy and can mark cookies Secure behind HTTPS with `SESSION_COOKIE_SECURE=true`
+
+Treat API keys, OAuth secrets, and Supabase credentials as sensitive. Do not commit them to source control.
+
+## Extending the Project
+
+To add a new model:
+
+1. Add the provider settings in `debate_config.py`.
+2. Implement the provider wrapper in `agents.py`.
+3. Add the model metadata and icon in `web/assets/js/constants.js`.
+4. Update validation or scoring if the provider needs special handling.
+
+To change debate behavior:
+
+1. Update `debate.py` for orchestration changes.
+2. Update `reward.py` if the scoring logic changes.
+3. Surface any new controls in `web/assets/js/app.js` and the related CSS files.
+
+## Troubleshooting
+
+If the server does not start:
+
+- confirm the required environment variables are present
+- verify Supabase credentials
+- verify GitHub OAuth credentials
+- make sure the Python environment has the dependencies installed
+
+If the debate fails:
+
+- try one provider first, such as `--agents groq`
+- reduce the number of rounds to `--rounds 1`
+- confirm the provider API key works
+- check quota or rate limits for the model provider
+
+If the UI loads but no files appear:
+
+- confirm you are signed in
+- create a folder or upload a file from the sidebar
+- verify the file extension is supported
+
+If a report is blank or partial:
+
+- open the saved file in `debates/`
+- inspect the `Run Warnings` section
+- check the server logs for provider failures
+
+## Development Commands
+
+```bash
+python3 -m py_compile web_app.py debate.py reward.py agents.py
+python3 -u debate.py --rounds 1 --agents groq --no-human
+uvicorn web_app:app --host 127.0.0.1 --port 8765 --reload
+```
+
+The scorer persists a `q_table.json` file between runs. Remove it if you want to reset the learned ordering and scoring history.
+
+## Deployment
+
+The best free hosting fit for the current app is Hugging Face Spaces with Docker support.
+
+Suggested Space name:
+
+```text
+debate-lab
+```
+
+That would give you a public Space URL in the form:
+
+```text
+https://ramadhanzome-debate-lab.hf.space
+```
+
+Why Spaces fits this project well:
+
+- it supports the Python backend and the browser UI together
+- the Dockerfile already listens on port `7860`
+- the app can keep persistent storage for uploads, reports, support notes, and the Q-table
+- you can keep all secrets in Space variables instead of source control
+
+Before publishing, set these Space variables:
+
+```bash
+APP_DATA_DIR=/data
+SUPABASE_URL=...
+SUPABASE_SERVICE_KEY=...
+SUPABASE_ANON_KEY=...
+GITHUB_CLIENT_ID=...
+GITHUB_CLIENT_SECRET=...
+SESSION_SECRET=...
+```
+
+Attach persistent storage for the app data directory so uploads and reports survive restarts. The app will use `APP_DATA_DIR` automatically when it is present.
+
+## Contact
+
+If you need help using the project:
+
+- Email: ramadhanzome@gmail.com
+- Use the in-app Support page for feedback and bug reports.
+
+## License
+
+This project is provided under a commercial/proprietary license. See `LICENSE` for details.

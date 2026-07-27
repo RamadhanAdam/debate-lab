@@ -17,10 +17,10 @@ export async function fetchInputs() {
   return api("/api/inputs");
 }
 
-export async function saveInput(name, content) {
+export async function saveInput(name, content, encoding = "utf-8") {
   return api("/api/input", {
     method: "POST",
-    body: JSON.stringify({ name, content }),
+    body: JSON.stringify({ name, content, encoding }),
   });
 }
 
@@ -33,6 +33,21 @@ export async function deleteInput(name) {
 
 export async function deleteAllInputsReq() {
   return api("/api/inputs/all", { method: "DELETE" });
+}
+
+export async function createFolderReq(name) {
+  return api("/api/folders", {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function fetchDocsReq() {
+  return api("/api/docs");
+}
+
+export async function fetchDocReq(slug) {
+  return api(`/api/docs/${encodeURIComponent(slug)}`);
 }
 
 export async function fetchReports() {
@@ -105,5 +120,16 @@ export async function submitInterjectReq(jobId, text) {
   return api(`/api/jobs/${jobId}/interject`, {
     method: "POST",
     body: JSON.stringify({ text })
+  });
+}
+
+export async function fetchSupport() {
+  return api("/api/support");
+}
+
+export async function submitSupportReq(payload) {
+  return api("/api/support", {
+    method: "POST",
+    body: JSON.stringify(payload),
   });
 }

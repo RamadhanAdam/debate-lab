@@ -1,75 +1,82 @@
-# Adding New Agents
+# Agent Guide
 
-Debate Lab's agent system is heavily modularized. To add a new AI model to the debate, follow these steps.
+This guide explains how the debate agents are wired together and how to add a new provider.
 
-## Step 1: Add API Key to Environment
+## Current Agent Flow
 
-Add your provider's API key to `.env` and `.env.example`:
-\`\`\`bash
-MYMODEL_API_KEY=your_key_here
-\`\`\`
+The app creates agent instances in `agents.py`, then `debate.py` runs them round by round. Each agent receives:
 
-Load it in `debate_config.py`:
-\`\`\`python
-MYMODEL_API_KEY = os.getenv("MYMODEL_API_KEY", None)
-MYMODEL_MODEL = "mymodel-latest"
-\`\`\`
+- the topic or prompt
+- the loaded input context
+- the current round number
+- the debate mode
+- the previous transcript
+- optional goal and persona hints
 
-Add it to the `AGENTS` mapping in `debate_config.py`:
-\`\`\`python
-AGENTS = {
-    ...
-    "mymodel": "My Model Display Name",
-}
-\`\`\`
+Arguments are then scored by `reward.py` and the strongest agents are nudged earlier or later in future rounds by the learning layer.
 
-## Step 2: Create the Agent Class
+The browser UI mirrors the same agent roster, so the names, colors, and icons stay consistent between the docs, the CLI, and the app.
 
-In `agents.py`, create a class inheriting from `BaseAgent`:
+## Built-In Agents
 
-\`\`\`python
-from debate_config import MYMODEL_API_KEY, MYMODEL_MODEL, TIME_LIMIT
+The current agent roster is defined in `debate_config.py` and surfaced in the UI through `web/assets/js/constants.js`.
 
-class MyModelAgent(BaseAgent):
-    def __init__(self):
-        super().__init__("mymodel")
-        if not MYMODEL_API_KEY:
-            raise ValueError("MYMODEL_API_KEY is not set.")
-        # Initialize your SDK client here
-        
-    async def argue(self, topic: str, context: str, round_num: int, mode: str, other_arguments: list) -> str:
-        prompt = self.build_prompt(topic, context, round_num, mode, other_arguments)
-        
-        # Make async API call to your model
-        # Return the generated text
-        argument = "Generated text from MyModel"
-        
-        self.add_to_history(argument)
-        return argument
-\`\`\`
+Typical built-in agents include:
 
-## Step 3: Register the Agent
+- GPT
+- Groq
+- Gemini
+- Claude
+- DeepSeek
+- Kimi
+- Human
 
-Add your agent to the `get_agent` factory function in `agents.py`:
+You do not need all of them enabled. The UI and CLI both allow you to run a subset.
 
-\`\`\`python
-def get_agent(name: str) -> BaseAgent:
-    agents = {
-        ...
-        "mymodel": MyModelAgent,
-    }
-    return agents[name]()
-\`\`\`
+## Adding a New Agent
 
-## Step 4: Update the Web UI
+To add a provider:
 
-In `web/assets/js/constants.js`, add your agent to `AGENT_META` so it renders correctly in the Arena:
+1. Add its API key and model name in `debate_config.py`.
+2. Implement an agent class in `agents.py` that inherits from the base agent type used in the project.
+3. Register it in the `get_agent()` factory.
+4. Add display metadata in `web/assets/js/constants.js` so the UI can render an icon and color.
+5. Update any validation or key-testing paths in `web_app.py` if the provider needs special handling.
 
-\`\`\`javascript
-export const AGENT_META = {
-  ...
-  mymodel: { initials: "MM", name: "My Model", cls: "mymodel", color: "#123456" },
-};
-\`\`\`
+## Prompt Shape
 
-Update `web/assets/css/arena.css` to add the color class if you want custom styling for the chat bubbles.
+The debate engine typically expects the agent to consider:
+
+- the input files
+- the current round
+- previous arguments
+- the selected mode
+- the selected goal
+- the persona
+
+The exact prompt template lives in the provider wrappers and can be adjusted if you want sharper behavior or a more formal debate style.
+
+## Output style
+
+Good agent outputs in this project are usually:
+
+- short enough to scan quickly
+- structured with headings or bullets
+- plain markdown rather than highly decorated prose
+- focused on one idea per message
+
+## Practical Tips
+
+- Keep prompts short enough that the provider can answer within its context limits.
+- Prefer structured instructions over vague role-play.
+- Return plain markdown when possible so the report renderer can display the response cleanly.
+- If a provider fails frequently, catch the exception and let the debate continue with the remaining agents.
+- Keep the provider list short when testing the UI so the run finishes quickly.
+
+## Related Files
+
+- `agents.py`
+- `debate.py`
+- `debate_config.py`
+- `reward.py`
+- `web/assets/js/constants.js`

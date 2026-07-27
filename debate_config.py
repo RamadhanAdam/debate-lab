@@ -12,14 +12,18 @@ load_dotenv()
 
 # Path configuration
 ROOT = Path(__file__).parent
+DATA_DIR = Path(os.getenv("APP_DATA_DIR", str(ROOT))).expanduser()
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 # Directories for debates and input data
-DEBATES_DIR = ROOT / "debates"
-INPUT_DIR = ROOT / "input"
+DEBATES_DIR = DATA_DIR / "debates"
+INPUT_DIR = DATA_DIR / "input"
+SUPPORT_DIR = DATA_DIR / "support"
 
 # Ensure directories exist
-DEBATES_DIR.mkdir(exist_ok=True)
-INPUT_DIR.mkdir(exist_ok=True)
+DEBATES_DIR.mkdir(parents=True, exist_ok=True)
+INPUT_DIR.mkdir(parents=True, exist_ok=True)
+SUPPORT_DIR.mkdir(parents=True, exist_ok=True)
 
 # API keys 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", None)
@@ -66,7 +70,7 @@ DISCOUNT_FACTOR = 0.9 # How much future rewards are valued compared to immediate
 EPSILON = 0.2 # Exploration rate for action selection (20% of the time, choose a random action, i.e system tries something different instead of what it knows works)
 # This is how it discovers better strategies over time instead of getting stuck. The other 80% it exploits what it already learned.
 
-Q_TABLE_FILE = ROOT / "q_table.json" # File to save the Q-table for learning across debates. Meaning learning persists between runs
+Q_TABLE_FILE = DATA_DIR / "q_table.json" # File to save the Q-table for learning across debates. Meaning learning persists between runs
 # Every debate the system makes is slightly smarter about which arguments are best
 
 # Scoring Criteria

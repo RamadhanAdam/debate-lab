@@ -92,8 +92,33 @@
 .login-card-left { display: flex; flex-direction: column; justify-content: center; }
 .login-card-right { display: flex; flex-direction: column; justify-content: center; gap: 16px; }
 
+.auth-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.auth-tab {
+  min-height: 40px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--ink2);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.auth-tab.active {
+  color: var(--ink);
+  border-color: var(--accent);
+  background: var(--accent-glow);
+}
+
 @media (max-width: 768px) {
   .login-card { grid-template-columns: 1fr; padding: 32px; gap: 32px; }
+  .auth-tabs { grid-template-columns: 1fr; }
 }
 
 /* Settings */
@@ -108,3 +133,137 @@
   border: 2px solid transparent;
 }
 .avatar-option.selected { border-color: #fff; box-shadow: 0 0 0 4px var(--accent-glow); transform: scale(1.1); }
+
+/* Docs Launcher */
+.docs-launch-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.docs-launch-card {
+  text-align: left;
+  padding: 16px 18px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 20px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  cursor: pointer;
+  color: inherit;
+  min-height: 70px;
+}
+
+.docs-launch-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+  box-shadow: var(--glass-shadow);
+}
+
+.docs-launch-copy { min-width: 0; }
+
+.docs-launch-title {
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.docs-launch-summary {
+  font-size: 13px;
+  color: var(--ink2);
+  line-height: 1.55;
+  margin-top: 4px;
+}
+
+.docs-launch-arrow {
+  color: var(--ink2);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.docs-launch-panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 24px;
+}
+
+.help-faq {
+  display: grid;
+  gap: 12px;
+}
+
+.help-faq-item {
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  border-radius: 18px;
+  padding: 16px 18px;
+}
+
+.help-faq-item strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.help-contact {
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  border-radius: 18px;
+  padding: 18px;
+}
+
+/* History chat */
+.history-chat-list {
+  display: grid;
+  gap: 12px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding-right: 6px;
+  margin-bottom: 12px;
+}
+
+.history-chat-row {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.history-chat-row.human {
+  flex-direction: row-reverse;
+}
+
+.history-chat-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.history-chat-bubble-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.history-chat-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.history-chat-controls input {
+  flex: 1;
+  min-width: 220px;
+}
+
+@media (max-width: 768px) {
+  .docs-launch-card { grid-template-columns: 1fr auto; }
+}

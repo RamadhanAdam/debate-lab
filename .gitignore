@@ -1,11 +1,39 @@
+# Secrets and local environment
 .env
-node_modules/
+.env.*
+!.env.example
+
+# Python
 __pycache__/
 *.pyc
-q_table.json
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+env/
+.conda/
+
+# Node / frontend
+node_modules/
+dist/
+build/
+
+# App data and generated artifacts
 input/
 debates/
 reviews/
-venv/
-.conda/
-*.egg-info/\n# Ignored inputs and debates\ninput/\ndebates/\nq_table.json
+support/
+q_table.json
+
+# Git / OS clutter
+.git/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Debate Lab Docs</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+  <link rel="stylesheet" href="/assets/css/variables.css?v=20260606">
+  <link rel="stylesheet" href="/assets/css/base.css?v=20260606">
+  <link rel="stylesheet" href="/assets/css/docs.css?v=20260606">
+</head>
+<body class="docs-page">
+  <div class="docs-shell">
+    <aside class="docs-rail">
+      <a class="docs-brand" href="/">
+        <div class="mark">DL</div>
+        <div>
+          <div class="docs-brand-title">Debate Lab</div>
+          <div class="docs-brand-subtitle">Documentation</div>
+        </div>
+      </a>
+
+      <div class="docs-rail-section">
+        <a class="docs-home-link" href="/">Back to app</a>
+        <a class="docs-home-link secondary" href="/docs/getting-started">Start here</a>
+      </div>
+
+      <div class="docs-rail-section">
+        <div class="docs-rail-label">Guides</div>
+        <nav id="docs-nav" class="docs-nav"></nav>
+      </div>
+    </aside>
+
+    <main class="docs-main">
+      <header class="docs-hero">
+        <div class="docs-hero-copy">
+          <p class="docs-kicker">Guide</p>
+          <h1 id="doc-title">Loading documentation...</h1>
+          <p id="doc-summary" class="docs-summary"></p>
+          <div class="docs-actions">
+            <a class="docs-button" href="/" id="docs-back">Open app</a>
+            <a class="docs-button secondary" href="/docs/getting-started" id="docs-index">Start here</a>
+          </div>
+        </div>
+      </header>
+
+      <section id="doc-special" class="docs-special"></section>
+
+      <section class="docs-content-grid">
+        <article class="docs-article">
+          <div id="doc-content" class="docs-markdown"></div>
+        </article>
+
+        <aside class="docs-side">
+          <section class="docs-card">
+            <div class="docs-card-title">On this page</div>
+            <nav id="doc-toc" class="docs-toc"></nav>
+          </section>
+          <section class="docs-card">
+            <div class="docs-card-title">Related</div>
+            <div id="doc-related" class="docs-related"></div>
+          </section>
+        </aside>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="/assets/js/docs.js?v=20260606"></script>
+</body>
+</html>

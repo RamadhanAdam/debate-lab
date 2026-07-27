@@ -97,6 +97,22 @@ textarea { resize: vertical; min-height: 120px; line-height: 1.5; }
 .status.failed { color: var(--danger); border-color: var(--danger); background: rgba(218,54,51,0.1); }
 .status.completed { color: var(--success); border-color: var(--success); background: rgba(63,185,80,0.1); }
 
+/* Status Indicators */
+.dot-pulse {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 0 rgba(56, 139, 253, 0.7);
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(56, 139, 253, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(56, 139, 253, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(56, 139, 253, 0); }
+}
+
 /* Toasts */
 .toast-container {
   position: fixed;
@@ -138,3 +154,117 @@ textarea { resize: vertical; min-height: 120px; line-height: 1.5; }
 
 /* SVG Icons */
 svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+.btn svg, .icon-btn svg { flex-shrink: 0; }
+
+.account-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  color: var(--ink);
+  cursor: pointer;
+  box-shadow: var(--glass-shadow);
+}
+
+.account-button-meta {
+  display: grid;
+  gap: 2px;
+  text-align: right;
+  min-width: 0;
+}
+
+.account-button-name {
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.account-button-email {
+  font-size: 11px;
+  color: var(--ink2);
+  line-height: 1.1;
+}
+
+.account-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 210;
+}
+
+.account-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(320px, calc(100vw - 24px));
+  background: var(--bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+  box-shadow: var(--glass-shadow);
+  padding: 12px;
+  display: grid;
+  gap: 6px;
+  z-index: 220;
+}
+
+.account-menu-header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 8px 12px;
+}
+
+.account-menu-name {
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.account-menu-email {
+  font-size: 12px;
+  color: var(--ink2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.account-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  border-radius: 12px;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+  min-height: 40px;
+}
+
+.account-menu-item:hover {
+  background: var(--glass-bg);
+}
+
+.account-menu-item.danger {
+  color: var(--danger);
+}
+
+.account-menu-divider {
+  height: 1px;
+  background: var(--glass-border);
+  margin: 4px 0;
+}
+
+.app-topbar .btn.hamburger {
+  display: inline-flex;
+}

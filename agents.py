@@ -43,7 +43,7 @@ class BaseAgent(ABC):
 
     def __init__(self, name: str):
         self.name = name
-        self.display_name = AGENTS[name]
+        self.display_name = AGENTS.get(name, name)
         self.history = []
 
     def reset(self):
@@ -53,66 +53,93 @@ class BaseAgent(ABC):
         self.history.append(argument)
 
     def build_prompt(self, topic: str, context: str, round_num: int, mode: str, other_arguments: list, goal: str = None, persona: str = None) -> str:
-        if len(context) > 12000:
-            context = context[:6000] + "\n\n...[truncated]...\n\n" + context[-6000:]
-
-        persona_instr = persona if persona else "You are a rigorous analyst."
-        goal_instr = f"DEBATE GOAL: {goal}" if goal else ""
-
-        if round_num == 1:
-            if mode == "review":
-                instruction = (
-                    f"{persona_instr} "
-                    "Read the provided files carefully and give your independent critical assessment. "
-                    "Cite specific evidence from the files, identify unjustified assumptions, and be precise."
-                    f"\n{goal_instr}"
-                )
-            else:
-                instruction = (
-                    f"{persona_instr} "
-                    "Take a strong position on the topic and argue it clearly. "
-                    "Cite specific evidence from the provided files, identify unjustified assumptions, and be precise."
-                    f"\n{goal_instr}"
-                )
-
-        elif round_num == 2:
-            others = "\n\n".join([f"{name}:\n{arg}" for name, arg in other_arguments])
-            instruction = (
-                f"{persona_instr} "
-                f"You have read the files and made your initial assessment. "
-                f"Now read what the other reviewers said and directly respond to each other agent by name.\n\n"
-                f"Other reviewers said:\n{others}\n\n"
-                f"Quote their words, agree or disagree with specific points, and provide your counter-arguments."
-                f"\n{goal_instr}"
+        context_limit = 12000
+        if len(context) > context_limit:
+            head = context[:5000]
+            tail = context[-5000:]
+            context = (
+                head
+                + "\n\n...[truncated]...\n\n"
+                + tail
             )
 
+        persona_instr = persona if persona else "You are a rigorous analyst."
+        goal_instr = f"Debate goal: {goal}" if goal else "Debate goal: review the material thoroughly."
+        fix_instr = (
+            "When you identify a problem, name the file, folder, route, or component if it is visible in the context. "
+            "Then say exactly what should change, why it matters, and what to verify after the change."
+        )
+        previous = self.history[-3:] if self.history else []
+        previous_block = "\n\n".join(previous) if previous else "None yet."
+        other_block = "\n\n".join([f"--- {name} ---\n{arg}" for name, arg in other_arguments[-6:]]) if other_arguments else "None yet."
+
+        if round_num == 1:
+            instruction = (
+                f"{persona_instr}\n"
+                f"{goal_instr}\n"
+                "Round 1: give an independent first read.\n"
+                "Use clear markdown with these sections:\n"
+                "## Deep Findings\n"
+                "## Evidence From The Files\n"
+                "## Problems Or Risks\n"
+                "## Concrete Changes\n"
+                "## What To Verify Next\n"
+                "## Files To Inspect Next\n"
+                "Be specific, cite filenames or headings when you can, and quote short snippets when the context makes them visible. Focus on depth, not summary."
+            )
+        elif round_num == 2:
+            others = "\n\n".join([f"{name}:\n{arg}" for name, arg in other_arguments[-6:]])
+            instruction = (
+                f"{persona_instr}\n"
+                f"{goal_instr}\n"
+                "Round 2: directly respond to each other agent.\n"
+                "Use markdown with these sections:\n"
+                "## Where I Agree\n"
+                "## Where I Disagree\n"
+                "## Evidence That Matters Most\n"
+                "## Revised Recommendation\n"
+                "## Concrete Fixes\n"
+                "## What Would Change My Mind\n"
+                "Name the other agents and react to their strongest points. Push toward concrete edits rather than generic agreement."
+            )
         else:
             instruction = (
-                f"{persona_instr} "
-                "This is your final argument. "
-                "Synthesize everything that has been said across all rounds. "
-                "Provide the 3 most important actionable recommendations, state what to do first, and be direct and concise."
-                f"\n{goal_instr}"
+                f"{persona_instr}\n"
+                f"{goal_instr}\n"
+                "Final round: synthesize the entire debate into a practical conclusion with implementation detail.\n"
+                "Use markdown with these sections:\n"
+                "## Executive Judgment\n"
+                "## Biggest Remaining Gaps\n"
+                "## What To Do First\n"
+                "## Final Recommendation\n"
+                "## Suggested Follow-Up Questions\n"
+                "## Suggested Patch Outline\n"
+                "Provide the 3 most important actionable recommendations, state what to do first, and be direct and concrete. Do not summarize the debate loosely; turn it into a work plan."
             )
 
         prompt = f"""
 {instruction}
+{fix_instr}
 
-TOPIC: {topic}
+TOPIC
+{topic}
 
-FILES PROVIDED:
+FILES
 {context}
 
-YOUR PREVIOUS ARGUMENTS IN THIS DEBATE:
-{chr(10).join(self.history) if self.history else "None yet."}
+OTHER REVIEWERS SO FAR
+{others if round_num == 2 else other_block}
 
-Now give your argument for round {round_num}.
+YOUR LAST FEW ARGUMENTS
+{previous_block}
+
+Return only the debate answer. Do not restate the prompt.
 """.strip()
 
         return prompt
 
     @abstractmethod
-    async def argue(self, topic: str, context: str, round_num: int, mode: str, other_arguments: list) -> str:
+    async def argue(self, topic: str, context: str, round_num: int, mode: str, other_arguments: list, goal: str = None, persona: str = None) -> str:
         pass
 
 
@@ -135,7 +162,7 @@ def get_github_cli_token() -> str:
             text=True,
         ).strip()
     except (FileNotFoundError, subprocess.CalledProcessError) as exc:
-        raise RuntimeError(
+        raise ValueError(
             "GitHub CLI is not authenticated. Run: gh auth login -h github.com"
         ) from exc
 
@@ -150,8 +177,8 @@ class GPTAgent(BaseAgent):
         self.github_token = get_github_cli_token()
         self.client = CopilotClient(SubprocessConfig(github_token=self.github_token))
 
-    async def argue(self, topic: str, context: str, round_num: int, mode: str, other_arguments: list) -> str:
-        prompt = self.build_prompt(topic, context, round_num, mode, other_arguments)
+    async def argue(self, topic: str, context: str, round_num: int, mode: str, other_arguments: list, goal: str = None, persona: str = None) -> str:
+        prompt = self.build_prompt(topic, context, round_num, mode, other_arguments, goal=goal, persona=persona)
         session = None
         try:
             await self.client.start()
@@ -184,8 +211,8 @@ class GroqAgent(BaseAgent):
             raise ValueError("GROQ_API_KEY is not set in your .env file.")
         self.client = Groq(api_key=GROQ_API_KEY, timeout=TIME_LIMIT, max_retries=0)
 
-    async def argue(self, topic: str, context: str, round_num: int, mode: str, other_arguments: list) -> str:
-        prompt = self.build_prompt(topic, context, round_num, mode, other_arguments)
+    async def argue(self, topic: str, context: str, round_num: int, mode: str, other_arguments: list, goal: str = None, persona: str = None) -> str:
+        prompt = self.build_prompt(topic, context, round_num, mode, other_arguments, goal=goal, persona=persona)
         loop = asyncio.get_event_loop()
         response = await asyncio.wait_for(
             loop.run_in_executor(
@@ -216,8 +243,8 @@ class GeminiAgent(BaseAgent):
             raise ValueError("GOOGLE_API_KEY is not set in your .env file.")
         self.client = genai.Client(api_key=GOOGLE_API_KEY)
 
-    async def argue(self, topic: str, context: str, round_num: int, mode: str, other_arguments: list) -> str:
-        prompt = self.build_prompt(topic, context, round_num, mode, other_arguments)
+    async def argue(self, topic: str, context: str, round_num: int, mode: str, other_arguments: list, goal: str = None, persona: str = None) -> str:
+        prompt = self.build_prompt(topic, context, round_num, mode, other_arguments, goal=goal, persona=persona)
         loop = asyncio.get_event_loop()
         response = await asyncio.wait_for(
             loop.run_in_executor(
@@ -247,8 +274,8 @@ class KimiAgent(BaseAgent):
             raise ValueError("KIMI_API_KEY is not set in your .env file.")
         self.client = OpenAI(api_key=KIMI_API_KEY, base_url="https://api.moonshot.cn/v1", timeout=TIME_LIMIT, max_retries=0)
 
-    async def argue(self, topic: str, context: str, round_num: int, mode: str, other_arguments: list) -> str:
-        prompt = self.build_prompt(topic, context, round_num, mode, other_arguments)
+    async def argue(self, topic: str, context: str, round_num: int, mode: str, other_arguments: list, goal: str = None, persona: str = None) -> str:
+        prompt = self.build_prompt(topic, context, round_num, mode, other_arguments, goal=goal, persona=persona)
         loop = asyncio.get_event_loop()
         response = await asyncio.wait_for(
             loop.run_in_executor(
@@ -279,8 +306,8 @@ class DeepSeekAgent(BaseAgent):
             raise ValueError("DEEPSEEK_API_KEY is not set in your .env file.")
         self.client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com/v1", timeout=TIME_LIMIT, max_retries=0)
 
-    async def argue(self, topic: str, context: str, round_num: int, mode: str, other_arguments: list) -> str:
-        prompt = self.build_prompt(topic, context, round_num, mode, other_arguments)
+    async def argue(self, topic: str, context: str, round_num: int, mode: str, other_arguments: list, goal: str = None, persona: str = None) -> str:
+        prompt = self.build_prompt(topic, context, round_num, mode, other_arguments, goal=goal, persona=persona)
         loop = asyncio.get_event_loop()
         response = await asyncio.wait_for(
             loop.run_in_executor(
@@ -311,8 +338,8 @@ class ClaudeAgent(BaseAgent):
             raise ValueError("ANTHROPIC_API_KEY is not set in your .env file.")
         self.client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY, timeout=TIME_LIMIT, max_retries=0)
 
-    async def argue(self, topic: str, context: str, round_num: int, mode: str, other_arguments: list) -> str:
-        prompt = self.build_prompt(topic, context, round_num, mode, other_arguments)
+    async def argue(self, topic: str, context: str, round_num: int, mode: str, other_arguments: list, goal: str = None, persona: str = None) -> str:
+        prompt = self.build_prompt(topic, context, round_num, mode, other_arguments, goal=goal, persona=persona)
         loop = asyncio.get_event_loop()
         response = await asyncio.wait_for(
             loop.run_in_executor(

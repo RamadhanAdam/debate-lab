@@ -1,6 +1,7 @@
 import pytest
 import asyncio
-from httpx import AsyncClient
+from unittest.mock import patch
+from httpx import AsyncClient, ASGITransport
 
 @pytest.fixture
 def anyio_backend():
@@ -9,8 +10,27 @@ def anyio_backend():
 @pytest.fixture
 async def async_client():
     from web_app import app
-    async with AsyncClient(app=app, base_url="http://test") as client:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
+
+
+@pytest.fixture
+def mocker():
+    active = []
+
+    class MiniMocker:
+        def patch(self, target, *args, **kwargs):
+            mocked = patch(target, *args, **kwargs)
+            value = mocked.start()
+            active.append(mocked)
+            return value
+
+    try:
+        yield MiniMocker()
+    finally:
+        while active:
+            active.pop().stop()
 
 @pytest.fixture
 def mock_agent_response():

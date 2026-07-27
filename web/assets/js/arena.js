@@ -1,7 +1,26 @@
-import { runDebateReq, pollJobReq, saveReportReq, submitHumanInputReq, submitInterjectReq } from "./api.js";
-import { AGENT_META } from "./constants.js";
+import { runDebateReq, pollJobReq, saveReportReq, submitHumanInputReq, submitInterjectReq } from "./api.js?v=20260606";
+import { AGENT_META } from "./constants.js?v=20260606";
 
 export function useArena(state) {
+  function extractFollowupQuestions(markdown) {
+    if (!markdown) return [];
+    const lines = String(markdown).split(/\r?\n/);
+    const questions = [];
+    let inSection = false;
+    for (const rawLine of lines) {
+      const line = rawLine.trim();
+      if (/^##+\s+suggested follow[- ]up questions/i.test(line)) {
+        inSection = true;
+        continue;
+      }
+      if (inSection && /^##+\s+/.test(line)) break;
+      if (!inSection) continue;
+      const match = line.match(/^[*-]\s+(.*)$/);
+      if (match && match[1].trim()) questions.push(match[1].trim());
+    }
+    return questions;
+  }
+
   async function runDebate() {
     if (!state.selectedAgents.value.length) {
       state.jobMsg.value = "Select at least one agent";
@@ -19,12 +38,13 @@ export function useArena(state) {
     state.agentScores.value = {};
     state.warnings.value = [];
     state.summary.value = "";
-    state.reportContent.value = "";
-    state.currentRound.value = 0;
-    state.totalRounds.value = state.rounds.value;
-    state.page.value = "arena";
-    state.humanTurn.value = false;
-    state.interjecting.value = false;
+      state.reportContent.value = "";
+      state.currentRound.value = 0;
+      state.totalRounds.value = state.rounds.value;
+      state.reportSaved.value = false;
+      state.page.value = "arena";
+      state.humanTurn.value = false;
+      state.interjecting.value = false;
 
     try {
       const data = await runDebateReq({
@@ -107,6 +127,9 @@ export function useArena(state) {
 
       if (job.result) {
         updateArenaFromResult(job.result);
+        state.reportSaved.value = true;
+        if (state.loadDashboard) await state.loadDashboard();
+        if (state.loadReports) await state.loadReports();
       }
     } catch (e) {
       state.jobStatus.value = "failed";
@@ -177,6 +200,9 @@ export function useArena(state) {
     state.agentScores.value = result.agent_averages || {};
     state.totalRounds.value = result.rounds || 1;
     state.currentRound.value = result.rounds || 1;
+    if (state.followupQuestions) {
+      state.followupQuestions.value = extractFollowupQuestions(result.summary || "");
+    }
 
     if (result.rounds_data && result.rounds_data.length && state.transcript.value.length === 0) {
       for (const round of result.rounds_data) {

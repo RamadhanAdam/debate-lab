@@ -148,17 +148,48 @@
   border-color: var(--agent-color);
   background: rgba(255,255,255,0.08);
 }
+.chip-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--agent-color) 22%, transparent);
+  color: var(--agent-color);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.chip-avatar svg {
+  width: 14px;
+  height: 14px;
+  stroke: currentColor;
+  fill: none;
+}
 .chip-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--agent-color); }
-.chip-name { font-size: 13px; font-weight: 600; }
+.chip-name { font-size: 13px; font-weight: 600; white-space: nowrap; }
 .chip-stat { font-size: 10px; color: var(--ink2); margin-left: auto; }
 
 /* Upload Zone */
 .upload-zone {
+  width: 100%;
+  display: block;
+  appearance: none;
+  background: transparent;
   border: 2px dashed var(--line); border-radius: var(--radius);
   padding: 24px; text-align: center; color: var(--ink2); font-size: 13px;
   cursor: pointer; transition: all 0.2s;
 }
 .upload-zone:hover { border-color: var(--accent); background: var(--accent-glow); color: var(--ink); }
+
+.sr-file-input {
+  position: absolute;
+  opacity: 0;
+  width: 0.1px;
+  height: 0.1px;
+  overflow: hidden;
+  z-index: -1;
+  pointer-events: none;
+}
 
 /* File List */
 .file-list { display: flex; flex-direction: column; gap: 8px; }

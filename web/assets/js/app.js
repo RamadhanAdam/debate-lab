@@ -1,15 +1,14 @@
-import { AGENT_META, formatBytes, timeAgo } from "./constants.js";
+import { AGENT_META, AVATAR_STYLES, GENDER_OPTIONS, PRONOUN_OPTIONS, formatBytes, timeAgo, avatarUrl } from "./constants.js?v=20260606";
 import { 
-  checkAuthReq, emailSignInReq, emailRegisterReq 
-} from "./auth.js";
+  checkAuthReq, emailSignInReq, emailRegisterReq, emailResetPasswordReq
+} from "./auth.js?v=20260606";
 import { 
-  fetchStatus, fetchInputs, saveInput, deleteInput, deleteAllInputsReq,
-  fetchReports, fetchReport, deleteReportReq, cloneRepoReq, sendChatReq,
-  validateKeyReq, fetchAgentStats, fetchSessions
-} from "./api.js";
-import { useArena } from "./arena.js";
-
-const { createApp, ref, computed, onMounted, watch } = window.Vue;
+  api, fetchStatus, fetchInputs, saveInput, deleteInput, deleteAllInputsReq,
+  createFolderReq, fetchDocsReq, fetchDocReq, fetchReports, fetchReport, deleteReportReq, cloneRepoReq, sendChatReq,
+  validateKeyReq, fetchAgentStats, fetchSessions, fetchSupport, submitSupportReq
+} from "./api.js?v=20260606";
+import { useArena } from "./arena.js?v=20260606";
+const { createApp, ref, computed, onMounted, onBeforeUnmount, watch } = window.Vue;
 
 createApp({
   setup() {
@@ -37,6 +36,9 @@ createApp({
     // Sidebar & Mobile
     const sidebarOpen = ref(false);
     function toggleSidebar() { sidebarOpen.value = !sidebarOpen.value; }
+    const accountMenuOpen = ref(false);
+    function toggleAccountMenu() { accountMenuOpen.value = !accountMenuOpen.value; }
+    function closeAccountMenu() { accountMenuOpen.value = false; }
 
     // Toasts
     const toasts = ref([]);
@@ -51,22 +53,37 @@ createApp({
     }
 
     // Auth & Onboarding
-    const loginEmail = ref("");
+    const authEmail = ref("");
     const loginPassword = ref("");
-    const loginMode = ref("github");
+    const loginMode = ref("signin");
+    const loginPasswordVisible = ref(false);
+    const registerPassword = ref("");
+    const registerConfirmPassword = ref("");
     const loginLoading = ref(false);
+    const resetNotice = ref("");
+    const resetCooldown = ref(0);
+    let resetTimer = null;
     
     const onboardName = ref("");
     const onboardAvatarColor = ref("#3fb950");
+    const onboardGender = ref("unspecified");
+    const onboardPronouns = ref("they/them");
+    const onboardAvatarStyle = ref("classic");
+    const onboardUseGithubAvatar = ref(false);
     const onboardDone = ref(false);
 
     const profileName = ref("");
     const profileAvatarColor = ref("#3fb950");
+    const profileGender = ref("unspecified");
+    const profilePronouns = ref("they/them");
+    const profileAvatarStyle = ref("classic");
+    const profileUseGithubAvatar = ref(false);
 
     // Keys
     const keys = ref({ groq: "", google: "", kimi: "", deepseek: "", claude: "" });
     const keysStatus = ref({ groq: null, google: null, kimi: null, deepseek: null, claude: null });
-    const sessionOnlyKeys = ref(localStorage.getItem("dl_session_only") === "true");
+    const modelHeadroom = ref({ groq: 100, google: 100, kimi: 100, deepseek: 100, claude: 100 });
+    const sessionOnlyKeys = ref(localStorage.getItem("dl_session_only") !== "false");
 
     // Dashboard & History
     const debates = ref([]);
@@ -105,22 +122,120 @@ createApp({
     const inputFiles = ref([]);
     const cloneUrl = ref("");
     const draftContent = ref("");
+    const newFolderName = ref("");
+    const uploadStatus = ref("");
 
     // Report / Chat
     const reports = ref([]);
     const selectedReport = ref(null);
     const reportContent = ref("");
-    const reportHtml = computed(() => reportContent.value ? marked.parse(reportContent.value) : "");
+    const reportHtml = computed(() => reportContent.value ? renderMarkdownSafe(reportContent.value) : "");
+    const followupQuestions = ref([]);
     const chatMessages = ref([]);
     const chatInput = ref("");
     const chatLoading = ref(false);
+    const chatAssistantLabel = computed(() => keys.value.groq ? "Assistant" : "Local Assistant");
+    const docs = ref([]);
+    const selectedDoc = ref("");
+    const docTitle = ref("");
+    const docContent = ref("");
+    const docLoading = ref(false);
+    const supportItems = ref([]);
+    const supportCategory = ref("feedback");
+    const supportSubject = ref("");
+    const supportMessage = ref("");
+    const supportContact = ref("");
+    const supportSubmitting = ref(false);
+    function escapeHtml(value) {
+      return String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+    function renderMarkdownSafe(value) {
+      return marked.parse(escapeHtml(value || ""));
+    }
+    const docHtml = computed(() => docContent.value ? renderMarkdownSafe(docContent.value) : "");
+    function reportChatKey(scope) {
+      return `dl_report_chat_${String(scope || "conversation").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "")}`;
+    }
+    function loadSavedChat(scope) {
+      try {
+        const raw = localStorage.getItem(reportChatKey(scope));
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed : [];
+      } catch {
+        return [];
+      }
+    }
+    function saveSavedChat(scope, messages) {
+      try {
+        localStorage.setItem(reportChatKey(scope), JSON.stringify(messages.slice(-50)));
+      } catch {}
+    }
+    function currentChatScope() {
+      return selectedReport.value || String(currentJobId.value || topic.value || "conversation");
+    }
+    const conversationName = computed(() => {
+      const source = selectedReport.value || topic.value || "conversation";
+      return String(source)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 60) || "conversation";
+    });
+
+    function extractFollowupQuestions(markdown) {
+      if (!markdown) return [];
+      const lines = String(markdown).split(/\r?\n/);
+      const questions = [];
+      let inSection = false;
+      for (const rawLine of lines) {
+        const line = rawLine.trim();
+        if (/^##+\s+suggested follow[- ]up questions/i.test(line)) {
+          inSection = true;
+          continue;
+        }
+        if (inSection && /^##+\s+/.test(line)) break;
+        if (!inSection) continue;
+        const match = line.match(/^[*-]\s+(.*)$/);
+        if (match && match[1].trim()) questions.push(match[1].trim());
+      }
+      return questions;
+    }
+
+    function resetRecoveryState() {
+      resetNotice.value = "";
+      resetCooldown.value = 0;
+      if (resetTimer) {
+        clearInterval(resetTimer);
+        resetTimer = null;
+      }
+    }
+
+    function startResetCooldown(seconds = 30) {
+      if (resetTimer) clearInterval(resetTimer);
+      resetCooldown.value = seconds;
+      resetTimer = setInterval(() => {
+        if (resetCooldown.value <= 1) {
+          resetCooldown.value = 0;
+          clearInterval(resetTimer);
+          resetTimer = null;
+          return;
+        }
+        resetCooldown.value -= 1;
+      }, 1000);
+    }
 
     // Functions
 
     async function emailSignIn() {
+      const email = authEmail.value.trim();
       loginLoading.value = true;
       try {
-        await emailSignInReq(loginEmail.value, loginPassword.value);
+        await emailSignInReq(email, loginPassword.value);
         window.location.href = "/";
       } catch (e) {
         addToast("Sign In Failed", e.message, "error");
@@ -128,12 +243,36 @@ createApp({
     }
 
     async function emailRegister() {
+      if (!registerPassword.value || registerPassword.value !== registerConfirmPassword.value) {
+        addToast("Password Mismatch", "Make sure both passwords match.", "error");
+        return;
+      }
+      const email = authEmail.value.trim();
       loginLoading.value = true;
       try {
-        await emailRegisterReq(loginEmail.value, loginPassword.value);
+        await emailRegisterReq(email, registerPassword.value);
         addToast("Success", "Check your email to confirm", "success");
+        loginMode.value = "signin";
       } catch (e) {
         addToast("Registration Failed", e.message, "error");
+      } finally { loginLoading.value = false; }
+    }
+
+    async function forgotPassword() {
+      const email = authEmail.value.trim();
+      if (!email) {
+        addToast("Email Required", "Enter the account email to reset the password.", "info");
+        return;
+      }
+      loginLoading.value = true;
+      try {
+        await emailResetPasswordReq(email);
+        resetNotice.value = "If an account exists for that address, we've sent a recovery email. Check inbox, spam, and promotions.";
+        startResetCooldown(30);
+        addToast("Reset Sent", "Check your email for a recovery link.", "success");
+      } catch (e) {
+        resetNotice.value = "";
+        addToast("Reset Failed", e.message, "error");
       } finally { loginLoading.value = false; }
     }
 
@@ -144,16 +283,45 @@ createApp({
       keys.value.kimi = storage.getItem("dl_key_kimi") || "";
       keys.value.deepseek = storage.getItem("dl_key_deepseek") || "";
       keys.value.claude = storage.getItem("dl_key_claude") || "";
+      if (sessionOnlyKeys.value) {
+        for (const key of ["dl_key_groq", "dl_key_google", "dl_key_kimi", "dl_key_deepseek", "dl_key_claude"]) {
+          localStorage.removeItem(key);
+        }
+      }
       
       profileName.value = localStorage.getItem("dl_name") || "";
       profileAvatarColor.value = localStorage.getItem("dl_color") || "#3fb950";
+      profileGender.value = localStorage.getItem("dl_gender") || "unspecified";
+      profilePronouns.value = localStorage.getItem("dl_pronouns") || "they/them";
+      profileAvatarStyle.value = localStorage.getItem("dl_avatar_style") || "classic";
+      profileUseGithubAvatar.value = localStorage.getItem("dl_use_github_avatar") === "true";
       onboardDone.value = !!localStorage.getItem("dl_onboard_done");
+    }
+
+    function setHeadroom(provider, value) {
+      modelHeadroom.value[provider] = Math.max(0, Math.min(100, value));
+    }
+
+    function getHeadroom(provider) {
+      const status = keysStatus.value[provider];
+      if (!keys.value[provider]) return 0;
+      if (status === "valid") return modelHeadroom.value[provider] ?? 100;
+      if (status === "testing") return 50;
+      if (status === "limited") return 10;
+      if (status === "invalid") return 0;
+      return modelHeadroom.value[provider] ?? 60;
     }
 
     function saveLocalKeys() {
       const storage = sessionOnlyKeys.value ? sessionStorage : localStorage;
       localStorage.setItem("dl_session_only", sessionOnlyKeys.value);
-      
+      if (sessionOnlyKeys.value) {
+        localStorage.removeItem("dl_key_groq");
+        localStorage.removeItem("dl_key_google");
+        localStorage.removeItem("dl_key_kimi");
+        localStorage.removeItem("dl_key_deepseek");
+        localStorage.removeItem("dl_key_claude");
+      }
       storage.setItem("dl_key_groq", keys.value.groq);
       storage.setItem("dl_key_google", keys.value.google);
       storage.setItem("dl_key_kimi", keys.value.kimi);
@@ -162,7 +330,43 @@ createApp({
       
       localStorage.setItem("dl_name", profileName.value);
       localStorage.setItem("dl_color", profileAvatarColor.value);
+      localStorage.setItem("dl_gender", profileGender.value);
+      localStorage.setItem("dl_pronouns", profilePronouns.value);
+      localStorage.setItem("dl_avatar_style", profileAvatarStyle.value);
+      localStorage.setItem("dl_use_github_avatar", profileUseGithubAvatar.value);
       addToast("Settings Saved", "Your preferences have been stored.", "success");
+    }
+
+    function clearSavedKeys() {
+      for (const key of ["dl_key_groq", "dl_key_google", "dl_key_kimi", "dl_key_deepseek", "dl_key_claude"]) {
+        localStorage.removeItem(key);
+        sessionStorage.removeItem(key);
+      }
+      keys.value = { groq: "", google: "", kimi: "", deepseek: "", claude: "" };
+      addToast("Cleared", "Saved API keys were removed from this browser.", "info");
+    }
+
+    function signOut() {
+      clearSavedKeys();
+      window.location.href = "/auth/logout";
+    }
+
+    function openAccountSettings() {
+      page.value = "settings";
+      sidebarOpen.value = false;
+      accountMenuOpen.value = false;
+    }
+
+    function openMyProfile() {
+      page.value = "settings";
+      sidebarOpen.value = false;
+      accountMenuOpen.value = false;
+    }
+
+    function setTheme(mode) {
+      theme.value = mode;
+      localStorage.setItem("dl_theme", theme.value);
+      document.documentElement.setAttribute("data-theme", theme.value);
     }
 
     function downloadReport(name, content) {
@@ -184,13 +388,18 @@ createApp({
         const res = await validateKeyReq(provider, keys.value[provider]);
         if (res.valid) {
           keysStatus.value[provider] = "valid";
+          setHeadroom(provider, 100);
           addToast("Key Valid", `${provider} API key is working.`, "success");
         } else {
-          keysStatus.value[provider] = "invalid";
-          addToast("Key Invalid", res.error, "error");
+          const err = String(res.error || "Invalid key");
+          keysStatus.value[provider] = /rate limit|quota/i.test(err) ? "limited" : "invalid";
+          setHeadroom(provider, /rate limit|quota/i.test(err) ? 10 : 0);
+          addToast("Key Invalid", err, "error");
         }
       } catch (e) {
-        keysStatus.value[provider] = "invalid";
+        const err = String(e.message || e);
+        keysStatus.value[provider] = /rate limit|quota/i.test(err) ? "limited" : "invalid";
+        setHeadroom(provider, /rate limit|quota/i.test(err) ? 10 : 0);
         addToast("Error", e.message, "error");
       }
     }
@@ -198,6 +407,10 @@ createApp({
     function completeOnboarding() {
       profileName.value = onboardName.value || user.value?.github_username || "Researcher";
       profileAvatarColor.value = onboardAvatarColor.value;
+      profileGender.value = onboardGender.value;
+      profilePronouns.value = onboardPronouns.value;
+      profileAvatarStyle.value = onboardAvatarStyle.value;
+      profileUseGithubAvatar.value = onboardUseGithubAvatar.value;
       saveLocalKeys();
       localStorage.setItem("dl_onboard_done", "1");
       onboardDone.value = true;
@@ -239,32 +452,102 @@ createApp({
     }
 
     async function saveDraft() {
-      if (!draftContent.value) return;
-      await saveInput("web_brief.md", draftContent.value);
-      await loadInputFiles();
+      if (!draftContent.value.trim()) return;
+      try {
+        await saveInput("web_brief.md", draftContent.value);
+        await loadInputFiles();
+        addToast("Draft Saved", "Content added as web_brief.md", "success");
+      } catch (e) {
+        addToast("Save Failed", e.message, "error");
+      }
+    }
+
+    async function createFolder() {
+      const name = newFolderName.value.trim();
+      if (!name) return;
+      try {
+        await createFolderReq(name);
+        newFolderName.value = "";
+        await loadInputFiles();
+        addToast("Created", `Folder ${name} added`, "success");
+      } catch (e) {
+        addToast("Error", e.message, "error");
+      }
     }
 
     async function deleteInputFileObj(name) {
-      await deleteInput(name);
-      await loadInputFiles();
+      try {
+        await deleteInput(name);
+        await loadInputFiles();
+      } catch (e) {
+        addToast("Error", "Failed to delete file", "error");
+      }
     }
 
     async function clearAllInputs() {
       if (!confirm("Are you sure you want to delete all input files?")) return;
-      await deleteAllInputsReq();
-      await loadInputFiles();
-      addToast("Cleared", "All input files have been deleted.", "info");
+      try {
+        await deleteAllInputsReq();
+        await loadInputFiles();
+        uploadStatus.value = "All input files were deleted.";
+        addToast("Cleared", "All input files have been deleted.", "info");
+      } catch (e) {
+        addToast("Error", "Failed to clear inputs", "error");
+      }
+    }
+
+    function bytesToBase64(bytes) {
+      let binary = "";
+      const chunkSize = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+      }
+      return btoa(binary);
     }
 
     async function uploadFile(event) {
       const files = event.target.files;
-      if (!files.length) return;
-      for (const file of files) {
-        const text = await file.text();
-        await saveInput(file.name, text);
+      if (!files || !files.length) return;
+
+      let uploaded = 0;
+      let failed = 0;
+      let lastFileName = "";
+      
+      addToast("Uploading", `Preparing to upload ${files.length} file(s)...`, "info");
+      
+      try {
+        for (const file of files) {
+          try {
+            const bytes = new Uint8Array(await file.arrayBuffer());
+            await saveInput(file.name, bytesToBase64(bytes), "base64");
+            uploaded += 1;
+            lastFileName = file.name;
+          } catch (fileError) {
+            failed += 1;
+            console.warn(`Skipping failed upload for ${file.name}:`, fileError);
+          }
+        }
+        await loadInputFiles();
+        
+        if (uploaded > 0) {
+          const msg = uploaded === 1 ? `Uploaded ${lastFileName}` : `Uploaded ${uploaded} document(s)`;
+          uploadStatus.value = msg;
+          addToast("Success", msg, "success");
+        }
+        if (failed > 0) {
+          const msg = uploaded > 0
+            ? `${uploaded} file(s) uploaded, ${failed} file(s) failed.`
+            : `${failed} file(s) failed to upload.`;
+          uploadStatus.value = msg;
+          addToast("Upload Issue", msg, "warning");
+        }
+      } catch (e) {
+        console.error("Upload error:", e);
+        addToast("Upload Failed", e.message || "Could not save files", "error");
+        uploadStatus.value = "Upload failed.";
+      } finally {
+        if (event.target) event.target.value = "";
       }
-      await loadInputFiles();
-      addToast("Uploaded", `${files.length} files added`, "success");
     }
 
     async function cloneRepo() {
@@ -274,14 +557,18 @@ createApp({
         const res = await cloneRepoReq(cloneUrl.value);
         await loadInputFiles();
         cloneUrl.value = "";
+        uploadStatus.value = `Cloned ${res.files_copied} file(s) from the repository.`;
         addToast("Success", `Cloned ${res.files_copied} files`, "success");
-      } catch (e) { addToast("Clone Failed", e.message, "error"); }
+      } catch (e) {
+        uploadStatus.value = "Repository clone failed.";
+        addToast("Clone Failed", e.message, "error");
+      }
     }
 
     // Arena Setup
     const arenaState = {
       selectedAgents, jobMsg, jobStatus, saveDraft, arenaActive, reportSaved,
-      transcript, agentScores, warnings, summary, reportContent, currentRound,
+      transcript, agentScores, warnings, summary, reportContent, followupQuestions, currentRound,
       totalRounds, page, humanTurn, topic, mode, goal, persona, rounds, currentJobId, speakingAgent,
       humanInput, interjecting, profileName, loadDashboard, loadReports: loadReportsData, resultMode
     };
@@ -301,6 +588,7 @@ createApp({
       transcript.value = [];
       summary.value = "";
       reportContent.value = "";
+      followupQuestions.value = [];
       sidebarOpen.value = false;
     }
 
@@ -313,13 +601,66 @@ createApp({
       } catch (e) {}
     }
 
+    async function loadDocs() {
+      try {
+        const data = await fetchDocsReq();
+        docs.value = data.docs || [];
+      } catch (e) {}
+    }
+
+    async function loadSupport() {
+      try {
+        const data = await fetchSupport();
+        supportItems.value = data.items || [];
+      } catch (e) {}
+    }
+
+    function openDoc(slug) {
+      window.location.href = slug === "readme" ? "/docs" : `/docs/${slug}`;
+    }
+
+    async function submitSupport() {
+      const message = supportMessage.value.trim();
+      if (!message) {
+        addToast("Message Required", "Please write a short note for support.", "info");
+        return;
+      }
+      supportSubmitting.value = true;
+      try {
+        await submitSupportReq({
+          category: supportCategory.value,
+          subject: supportSubject.value.trim() || "Support request",
+          message,
+          contact: supportContact.value.trim(),
+          page: page.value,
+        });
+        supportMessage.value = "";
+        supportSubject.value = "";
+        await loadSupport();
+        addToast("Submitted", "Your note was added to the support inbox.", "success");
+      } catch (e) {
+        addToast("Support Error", e.message || "Could not send message", "error");
+      } finally {
+        supportSubmitting.value = false;
+      }
+    }
+
     async function loadReport(name) {
       selectedReport.value = name;
       try {
         const data = await fetchReport(name);
         reportContent.value = data.content;
-        chatMessages.value = [];
+        followupQuestions.value = extractFollowupQuestions(data.content);
+        chatMessages.value = loadSavedChat(name);
       } catch (e) { addToast("Error", "Failed to load report", "error"); }
+    }
+
+    function closeReport() {
+      saveSavedChat(currentChatScope(), chatMessages.value);
+      selectedReport.value = null;
+      reportContent.value = "";
+      followupQuestions.value = [];
+      chatMessages.value = [];
     }
 
     async function deleteReport(name) {
@@ -386,38 +727,122 @@ createApp({
         const data = await sendChatReq({
           message: msg, context: reportContent.value, history: chatMessages.value.slice(-6), groq_key: keys.value.groq
         });
-        chatMessages.value.push({ role: "assistant", text: data.reply });
+        chatMessages.value.push({ role: "assistant", text: data.reply, source: data.mode || (keys.value.groq ? "groq" : "local") });
+        saveSavedChat(currentChatScope(), chatMessages.value);
       } catch (e) {
         addToast("Chat Error", e.message, "error");
       } finally { chatLoading.value = false; }
     }
 
-    onMounted(() => { checkAuth(); });
+    async function saveConversation() {
+      const lines = [];
+      lines.push(`# Conversation: ${selectedReport.value || topic.value || "Untitled"}`);
+      lines.push("");
+      lines.push(`- Date: ${new Date().toISOString()}`);
+      if (selectedReport.value) lines.push(`- Report: ${selectedReport.value}`);
+      if (topic.value) lines.push(`- Topic: ${topic.value}`);
+      lines.push("");
+      lines.push("## Messages");
+      lines.push("");
+      for (const msg of chatMessages.value) {
+        lines.push(`### ${msg.role === "user" ? "You" : "Assistant"}`);
+        lines.push(msg.text);
+        lines.push("");
+      }
+      if (!chatMessages.value.length) {
+        addToast("No Chat", "There is no conversation to save yet.", "info");
+        return;
+      }
+      saveSavedChat(currentChatScope(), chatMessages.value);
+      await saveInput(`conversations/${conversationName.value}.md`, lines.join("\n"));
+      await loadInputFiles();
+      addToast("Saved", `Conversation stored in conversations/${conversationName.value}.md`, "success");
+    }
+
+    onMounted(() => {
+      checkAuth();
+      setInterval(() => {
+        if (user.value) checkAuth();
+      }, 5 * 60 * 1000);
+    });
+
+    onBeforeUnmount(() => {
+      if (resetTimer) clearInterval(resetTimer);
+    });
 
     watch(page, (val) => {
-      if (val === "arena") loadInputFiles();
+      if (val === "arena" || val === "files") loadInputFiles();
       if (val === "history") { loadReportsData(); loadDashboard(); }
+      if (val === "help") loadDocs();
+      if (val === "support") loadSupport();
       if (val === "dashboard") loadDashboard();
     });
 
+    watch(loginMode, (mode) => {
+      if (mode !== "forgot") resetRecoveryState();
+      if (mode !== "register") {
+        registerPassword.value = "";
+        registerConfirmPassword.value = "";
+      }
+      if (mode !== "signin") {
+        loginPassword.value = "";
+      }
+      loginPasswordVisible.value = false;
+    });
+
+    watch(warnings, (value) => {
+      const warningsText = Array.isArray(value) ? value.join(" ").toLowerCase() : String(value || "").toLowerCase();
+      const lowRate = /rate limit|quota|429/.test(warningsText);
+      if (!lowRate) return;
+      for (const provider of ["groq", "google", "kimi", "deepseek", "claude"]) {
+        const meta = provider === "google" ? "gemini" : provider;
+        const agentName = AGENT_META[provider]?.name?.toLowerCase() || "";
+        if (warningsText.includes(meta) || (agentName && warningsText.includes(agentName))) {
+          keysStatus.value[provider] = "limited";
+          setHeadroom(provider, 10);
+        }
+      }
+    }, { deep: true });
+
     const marked = window.marked;
+    const userAvatarSrc = computed(() => {
+      const name = profileName.value || user.value?.github_username || "Researcher";
+      if (profileUseGithubAvatar.value && user.value?.github_avatar) {
+        return user.value.github_avatar;
+      }
+      return avatarUrl(name, {
+        gender: profileGender.value,
+        style: profileAvatarStyle.value,
+        accent: profileAvatarColor.value,
+      });
+    });
+    const onboardAvatarSrc = computed(() => avatarUrl(
+      onboardName.value || user.value?.github_username || "Researcher",
+      {
+        gender: onboardGender.value,
+        style: onboardAvatarStyle.value,
+        accent: onboardAvatarColor.value,
+      }
+    ));
 
     return {
       user, authChecked, page, theme, toggleTheme,
-      sidebarOpen, toggleSidebar, sidebarCollapsed, toggleSidebarCollapse, toasts,
-      loginEmail, loginPassword, loginMode, loginLoading, emailSignIn, emailRegister,
-      onboardName, onboardAvatarColor, onboardDone, completeOnboarding,
-      profileName, profileAvatarColor, keys, keysStatus, sessionOnlyKeys, saveLocalKeys, validateKey, deleteAccount,
+      sidebarOpen, toggleSidebar, sidebarCollapsed, toggleSidebarCollapse, toasts, accountMenuOpen, toggleAccountMenu, closeAccountMenu,
+      authEmail, loginPassword, loginPasswordVisible, loginMode, loginLoading, emailSignIn, emailRegister, registerPassword, registerConfirmPassword, forgotPassword, resetNotice, resetCooldown,
+      onboardName, onboardAvatarColor, onboardGender, onboardPronouns, onboardAvatarStyle, onboardUseGithubAvatar, onboardAvatarSrc, onboardDone, completeOnboarding,
+      profileName, profileAvatarColor, profileGender, profilePronouns, profileAvatarStyle, profileUseGithubAvatar, keys, keysStatus, sessionOnlyKeys, saveLocalKeys, clearSavedKeys, signOut, validateKey, deleteAccount, openAccountSettings, openMyProfile, setTheme,
       debates, sessions, agentStats, loadingDebates, historySearch, selectedReports,
       topic, mode, goal, persona, rounds, selectedAgents, toggleAgent,
       jobStatus, jobMsg, currentJobId, arenaActive, configOpen, reportSaved, currentRound, totalRounds,
       speakingAgent, transcript, agentScores, warnings, summary, resultMode, humanTurn, humanInput, interjecting,
       runDebate, saveReport, submitHuman, submitInterject, downloadReport,
-      inputFiles, draftContent, deleteInputFileObj, clearAllInputs, uploadFile, cloneUrl, cloneRepo,
-      reports, filteredReports, selectedReport, reportContent, reportHtml, loadReport, deleteReport, deleteSelectedReports, toggleSelectAll,
-      chatMessages, chatInput, chatLoading, sendChat,
+      inputFiles, draftContent, deleteInputFileObj, clearAllInputs, uploadFile, cloneUrl, cloneRepo, newFolderName, createFolder, uploadStatus,
+      reports, filteredReports, selectedReport, reportContent, reportHtml, followupQuestions, loadReport, closeReport, deleteReport, deleteSelectedReports, toggleSelectAll,
+      chatMessages, chatInput, chatLoading, chatAssistantLabel, sendChat, saveConversation,
       goToArena, goToHistory,
-      AGENT_META, formatBytes, timeAgo, marked
+      docs, selectedDoc, docTitle, docContent, docHtml, docLoading, openDoc,
+      supportItems, supportCategory, supportSubject, supportMessage, supportContact, supportSubmitting, submitSupport, loadSupport,
+      AGENT_META, AVATAR_STYLES, GENDER_OPTIONS, PRONOUN_OPTIONS, formatBytes, timeAgo, marked, avatarUrl, userAvatarSrc, getHeadroom, renderMarkdownSafe
     };
   },
   template: `
@@ -435,44 +860,92 @@ createApp({
 
 <div v-else-if="page === 'login'" class="login-page">
   <div class="login-bg"></div>
-  <div class="login-card">
-    <div class="login-card-left">
-      <div class="mark" style="margin-bottom:24px;width:48px;height:48px;font-size:20px">DL</div>
-      <h1 style="font-size:32px;font-weight:800;margin-bottom:12px">Debate Lab</h1>
-      <p style="color:var(--ink2);line-height:1.6">Drop in any work. Get multiple AI analysts tearing it apart.</p>
-    </div>
-    <div class="login-card-right">
-      <a href="/auth/login" class="btn btn-secondary btn-full" style="background:var(--ink);color:var(--bg)">
-        <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5c.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34c-.46-1.16-1.11-1.47-1.11-1.47c-.91-.62.07-.6.07-.6c1 .07 1.53 1.03 1.53 1.03c.87 1.52 2.34 1.07 2.91.83c.09-.65.35-1.09.63-1.34c-2.22-.25-4.55-1.11-4.55-4.92c0-1.11.38-2 1.03-2.71c-.1-.25-.45-1.29.1-2.64c0 0 .84-.27 2.75 1.02c.79-.22 1.65-.33 2.5-.33c.85 0 1.71.11 2.5.33c1.91-1.29 2.75-1.02 2.75-1.02c.55 1.35.2 2.39.1 2.64c.65.71 1.03 1.6 1.03 2.71c0 3.82-2.34 4.66-4.57 4.91c.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2Z"/></svg>
-        Sign in with GitHub
-      </a>
-      <div style="display:flex;align-items:center;gap:12px;margin:8px 0">
-        <div style="flex:1;height:1px;background:var(--glass-border)"></div>
-        <span style="font-size:12px;color:var(--ink2)">OR</span>
-        <div style="flex:1;height:1px;background:var(--glass-border)"></div>
+    <div class="login-card">
+      <div class="login-card-left">
+        <div class="mark" style="margin-bottom:24px;width:48px;height:48px;font-size:20px">DL</div>
+        <h1 style="font-size:32px;font-weight:800;margin-bottom:12px">Debate Lab</h1>
+        <p style="color:var(--ink2);line-height:1.6;max-width:32ch">Review files, track debates, and keep the conversation moving without losing the thread.</p>
+        <div style="display:grid;gap:10px;margin-top:24px">
+          <div style="display:flex;gap:10px;align-items:center">
+            <svg style="color:var(--accent);flex-shrink:0"><path d="M4 6h16M4 12h10M4 18h16"/></svg>
+            <span class="muted" style="font-size:13px">Clean review runs with saved history</span>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center">
+            <svg style="color:var(--success);flex-shrink:0"><path d="M12 2l3 7 7 3-7 3-3 7-3-7-7-3 7-3z"/></svg>
+            <span class="muted" style="font-size:13px">Private uploads, folders, and repo clones</span>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center">
+            <svg style="color:var(--warning);flex-shrink:0"><path d="M12 2v6"/><path d="M12 14v8"/><circle cx="12" cy="12" r="10"/></svg>
+            <span class="muted" style="font-size:13px">Follow-up chat after the rounds finish</span>
+          </div>
+        </div>
+      </div>
+      <div class="login-card-right">
+        <a href="/auth/login" class="btn btn-secondary btn-full" style="background:var(--ink);color:var(--bg)">
+          <svg viewBox="0 0 24 24"><path fill="currentColor" d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5c.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34c-.46-1.16-1.11-1.47-1.11-1.47c-.91-.62.07-.6.07-.6c1 .07 1.53 1.03 1.53 1.03c.87 1.52 2.34 1.07 2.91.83c.09-.65.35-1.09.63-1.34c-2.22-.25-4.55-1.11-4.55-4.92c0-1.11.38-2 1.03-2.71c-.1-.25-.45-1.29.1-2.64c0 0 .84-.27 2.75 1.02c.79-.22 1.65-.33 2.5-.33c.85 0 1.71.11 2.5.33c1.91-1.29 2.75-1.02 2.75-1.02c.55 1.35.2 2.39.1 2.64c.65.71 1.03 1.6 1.03 2.71c0 3.82-2.34 4.66-4.57 4.91c.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2Z"/></svg>
+        Continue with GitHub
+        </a>
+      <div class="auth-tabs">
+        <button class="auth-tab" :class="{active: loginMode==='signin'}" @click="loginMode='signin'">Sign In</button>
+        <button class="auth-tab" :class="{active: loginMode==='register'}" @click="loginMode='register'">Create Account</button>
+        <button class="auth-tab" :class="{active: loginMode==='forgot'}" @click="loginMode='forgot'">Forgot Password</button>
       </div>
       <div class="field" style="margin-bottom:8px">
-        <input v-model="loginEmail" type="email" placeholder="Email address">
+        <input v-model="authEmail" type="email" placeholder="Email address" autocomplete="email" inputmode="email">
       </div>
-      <div class="field" style="margin-bottom:16px">
-        <input v-model="loginPassword" type="password" placeholder="Password">
-      </div>
-      <button class="btn btn-primary btn-full" @click="emailSignIn" :disabled="loginLoading">Sign In</button>
-      <button class="btn btn-ghost btn-full" @click="emailRegister" :disabled="loginLoading">Create Account</button>
+      <template v-if="loginMode==='signin'">
+        <div class="field" style="margin-bottom:16px">
+          <div style="display:flex;gap:8px;align-items:center">
+            <input v-model="loginPassword" :type="loginPasswordVisible ? 'text' : 'password'" placeholder="Password" autocomplete="current-password">
+            <button class="btn btn-secondary btn-sm" type="button" @click="loginPasswordVisible = !loginPasswordVisible" style="white-space:nowrap">
+              {{ loginPasswordVisible ? 'Hide' : 'Show' }}
+            </button>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-full" @click="emailSignIn" :disabled="loginLoading">Sign In</button>
+        <button class="btn btn-ghost btn-full" @click="loginMode='forgot'">Forgot password?</button>
+      </template>
+      <template v-else-if="loginMode==='register'">
+        <div class="field" style="margin-bottom:8px">
+          <div style="display:flex;gap:8px;align-items:center">
+            <input v-model="registerPassword" :type="loginPasswordVisible ? 'text' : 'password'" placeholder="Create password" autocomplete="new-password">
+            <button class="btn btn-secondary btn-sm" type="button" @click="loginPasswordVisible = !loginPasswordVisible" style="white-space:nowrap">
+              {{ loginPasswordVisible ? 'Hide' : 'Show' }}
+            </button>
+          </div>
+        </div>
+        <div class="field" style="margin-bottom:16px">
+          <input v-model="registerConfirmPassword" :type="loginPasswordVisible ? 'text' : 'password'" placeholder="Confirm password" autocomplete="new-password">
+        </div>
+        <button class="btn btn-primary btn-full" @click="emailRegister" :disabled="loginLoading">Create Account</button>
+        <button class="btn btn-ghost btn-full" @click="loginMode='signin'">Back to sign in</button>
+      </template>
+      <template v-else>
+        <p class="muted" style="margin:0 0 12px;font-size:12px;line-height:1.5">
+          We will send a recovery email to this address. Check inbox, spam, and promotions.
+        </p>
+        <div v-if="resetNotice" class="status completed" style="margin-bottom:12px">{{ resetNotice }}</div>
+        <button class="btn btn-primary btn-full" @click="forgotPassword" :disabled="loginLoading || resetCooldown > 0">
+          {{ resetCooldown > 0 ? ('Resend in ' + resetCooldown + 's') : (resetNotice ? 'Resend reset link' : 'Send reset link') }}
+        </button>
+        <button class="btn btn-ghost btn-full" @click="loginMode='signin'">Back to sign in</button>
+      </template>
       
       <div class="login-features" style="margin-top:24px;border-top:1px solid var(--glass-border);padding-top:24px">
-          <div style="display:flex;gap:12px;margin-bottom:16px">
-              <svg style="color:var(--accent);flex-shrink:0"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-              <div style="font-size:12px"><strong>Three AI Professors</strong><br><span class="muted">Top-tier models analyze your work from unique angles.</span></div>
+        <div style="display:grid;gap:12px">
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <svg style="color:var(--accent);flex-shrink:0"><path d="M12 2l3.2 6.8L22 12l-6.8 3.2L12 22l-3.2-6.8L2 12l6.8-3.2z"/></svg>
+            <div style="font-size:12px"><strong>Structured output</strong><br><span class="muted">Clear findings, concrete fixes, and follow-up questions.</span></div>
           </div>
-          <div style="display:flex;gap:12px;margin-bottom:16px">
-              <svg style="color:var(--success);flex-shrink:0"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11"/></svg>
-              <div style="font-size:12px"><strong>Scored Arguments</strong><br><span class="muted">Every point is graded on evidence, logic, and impact.</span></div>
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <svg style="color:var(--success);flex-shrink:0"><path d="M4 12h5l3-8 3 16 3-8h5"/></svg>
+            <div style="font-size:12px"><strong>Private workspace</strong><br><span class="muted">Uploads, folders, and notes stay in your own session.</span></div>
           </div>
-          <div style="display:flex;gap:12px">
-              <svg style="color:var(--warning);flex-shrink:0"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 1 1-7.6-11.7 8.5 8.5 0 0 1 8.5 7.9z"/><path d="M12 8v4l3 3"/></svg>
-              <div style="font-size:12px"><strong>Real-time Interjection</strong><br><span class="muted">Pause the debate at any time to steer the conversation.</span></div>
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <svg style="color:var(--warning);flex-shrink:0"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"/><path d="M8 10h8"/><path d="M8 14h5"/></svg>
+            <div style="font-size:12px"><strong>Follow-up chat</strong><br><span class="muted">Continue the conversation after the report is complete.</span></div>
           </div>
+        </div>
       </div>
     </div>
   </div>
@@ -493,10 +966,39 @@ createApp({
       <label>Your Personal Avatar</label>
       <div style="display:flex;justify-content:center;margin-bottom:16px">
         <div class="user-avatar" style="width:80px;height:80px;border-width:3px">
-          <img :src="'https://api.dicebear.com/9.x/glass/svg?seed=' + (onboardName || user?.github_username || 'Researcher')" alt="Avatar">
+          <img :src="onboardAvatarSrc" alt="Avatar">
         </div>
       </div>
-      <p class="muted" style="text-align:center;font-size:12px">Avatar is dynamically generated based on your name.</p>
+      <p class="muted" style="text-align:center;font-size:12px">Avatar is dynamically generated from your profile settings.</p>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:12px">
+      <div class="field">
+        <label>Gender</label>
+        <select v-model="onboardGender">
+          <option v-for="option in GENDER_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Pronouns</label>
+        <select v-model="onboardPronouns">
+          <option v-for="option in PRONOUN_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:12px">
+      <div class="field">
+        <label>Avatar Style</label>
+        <select v-model="onboardAvatarStyle">
+          <option v-for="option in AVATAR_STYLES" :key="option.value" :value="option.value">{{ option.label }}</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Use GitHub Avatar</label>
+        <label class="check-item" style="flex-direction:row-reverse;justify-content:flex-end;gap:12px;padding-top:10px">
+          <span>Prefer the GitHub profile image when available</span>
+          <input type="checkbox" v-model="onboardUseGithubAvatar">
+        </label>
+      </div>
     </div>
     <button class="btn btn-primary btn-full" @click="completeOnboarding">Complete Setup</button>
   </div>
@@ -508,6 +1010,10 @@ createApp({
     <div class="sidebar-brand">
       <div class="mark">DL</div>
       <div v-if="!sidebarCollapsed"><h1>Debate Lab</h1><p>Multi-model analysis</p></div>
+      <button class="btn btn-ghost btn-icon btn-sm sidebar-collapse-btn" @click="toggleSidebarCollapse" :title="sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'">
+        <svg v-if="!sidebarCollapsed"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="20" y2="18"></line></svg>
+        <svg v-else><line x1="5" y1="6" x2="19" y2="6"></line><line x1="5" y1="12" x2="19" y2="12"></line><line x1="5" y1="18" x2="19" y2="18"></line></svg>
+      </button>
     </div>
     <nav class="sidebar-nav">
       <button class="btn btn-ghost nav-item" :class="{active: page==='dashboard'}" @click="page='dashboard'; sidebarOpen=false">
@@ -522,6 +1028,19 @@ createApp({
         <svg><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
         <span v-if="!sidebarCollapsed" class="nav-label">History</span>
       </button>
+      
+      <div style="height:1px;background:var(--glass-border);margin:8px 12px"></div>
+      
+      <div v-if="!sidebarCollapsed" class="sidebar-project-folder" style="padding:12px">
+        <div class="nav-label muted" style="font-size:11px;font-weight:700;margin-bottom:8px">NEW PROJECT FOLDER</div>
+        <div style="display:flex;gap:6px">
+          <input v-model="newFolderName" type="text" placeholder="Folder name..." style="font-size:12px;padding:6px 10px;height:32px">
+          <button class="btn btn-secondary btn-sm" @click="createFolder" style="height:32px;padding:0 10px">
+            <svg style="width:14px;height:14px"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+          </button>
+        </div>
+      </div>
+
       <div style="height:1px;background:var(--glass-border);margin:8px 12px"></div>
       <div v-if="!sidebarCollapsed" class="nav-label muted" style="padding:0 12px;font-size:11px;font-weight:700;margin-top:8px">RECENT</div>
       <div v-for="s in sessions.slice(0,8)" :key="s.id" @click="goToHistory(s)"
@@ -534,33 +1053,80 @@ createApp({
         <svg><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
         <span v-if="!sidebarCollapsed" class="nav-label">Settings</span>
       </button>
-      <button class="btn btn-ghost nav-item" @click="toggleTheme">
-        <svg v-if="theme==='dark'"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
-        <svg v-else><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
-        <span v-if="!sidebarCollapsed" class="nav-label">Theme</span>
+      <button class="btn btn-ghost nav-item" :class="{active: page==='files'}" @click="page='files'; sidebarOpen=false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+        <span v-if="!sidebarCollapsed" class="nav-label">Files</span>
       </button>
       <button class="btn btn-ghost nav-item" :class="{active: page==='help'}" @click="page='help'; sidebarOpen=false">
         <svg><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-        <span v-if="!sidebarCollapsed" class="nav-label">Resources</span>
+        <span v-if="!sidebarCollapsed" class="nav-label">Documentation</span>
       </button>
-      <button class="btn btn-ghost nav-item" @click="toggleSidebarCollapse" style="margin-top:8px">
-        <svg v-if="!sidebarCollapsed"><polyline points="11 17 6 12 11 7"></polyline><polyline points="18 17 13 12 18 7"></polyline></svg>
-        <svg v-else><polyline points="13 17 18 12 13 7"></polyline><polyline points="6 17 11 12 6 7"></polyline></svg>
-        <span v-if="!sidebarCollapsed" class="nav-label">Collapse</span>
+      <button class="btn btn-ghost nav-item" :class="{active: page==='support'}" @click="page='support'; sidebarOpen=false">
+        <svg><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path><path d="M8 10h8"></path><path d="M8 14h5"></path></svg>
+        <span v-if="!sidebarCollapsed" class="nav-label">Support</span>
       </button>
     </nav>
-    <div class="sidebar-user">
-      <div class="user-avatar" :style="{borderColor: profileAvatarColor}">
-        <img :src="'https://api.dicebear.com/9.x/glass/svg?seed=' + (profileName || user?.github_username || 'Researcher')" alt="User">
-      </div>
-      <span v-if="!sidebarCollapsed" class="user-name">{{ profileName || user?.github_username }}</span>
-    </div>
   </aside>
 
   <main class="main-content">
-    <button class="btn btn-ghost btn-icon hamburger" style="position:absolute;top:12px;left:12px;z-index:100" @click="toggleSidebar" v-if="page !== 'arena'">
-      <svg><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-    </button>
+    <header class="app-topbar">
+      <div style="display:flex;align-items:center;gap:12px;min-width:0">
+        <button class="btn btn-ghost btn-icon hamburger" @click="toggleSidebar" v-if="page !== 'arena'">
+          <svg><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+        </button>
+        <div style="min-width:0">
+          <div style="font-size:12px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink2)">
+            {{ page === 'dashboard' ? 'Overview' : page === 'arena' ? 'New Analysis' : page === 'history' ? 'History' : page === 'files' ? 'Files' : page === 'help' ? 'Documentation' : page === 'support' ? 'Support' : 'Settings' }}
+          </div>
+          <div style="font-size:18px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+            Debate Lab
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:10px;position:relative">
+        <button class="btn btn-secondary btn-sm" @click="toggleTheme">
+          <svg v-if="theme==='dark'"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+          <svg v-else><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+          <span class="nav-label">{{ theme === 'dark' ? 'Dark' : 'Light' }}</span>
+        </button>
+        <button class="account-button" @click="toggleAccountMenu" :aria-expanded="accountMenuOpen" aria-label="Open account menu">
+          <span class="account-button-meta">
+            <span class="account-button-name">{{ profileName || user?.github_username || 'Profile' }}</span>
+          </span>
+          <span class="user-avatar" :style="{borderColor: profileAvatarColor, width:'34px', height:'34px'}">
+            <img :src="userAvatarSrc" alt="User avatar">
+          </span>
+          <svg style="width:14px;height:14px;color:var(--ink2)"><path d="M6 9l6 6 6-6"></path></svg>
+        </button>
+
+        <div v-if="accountMenuOpen" class="account-menu-backdrop" @click="closeAccountMenu"></div>
+        <div v-if="accountMenuOpen" class="account-menu">
+          <div class="account-menu-header">
+            <div class="user-avatar" :style="{borderColor: profileAvatarColor, width:'44px', height:'44px'}">
+              <img :src="userAvatarSrc" alt="User avatar">
+            </div>
+            <div style="min-width:0">
+              <div class="account-menu-name">{{ profileName || user?.github_username || 'Profile' }}</div>
+              <div class="account-menu-email">{{ user?.github_username ? user.github_username : 'Local profile' }}</div>
+            </div>
+          </div>
+          <button class="account-menu-item" @click="openMyProfile">
+            <svg><path d="M12 13a5 5 0 1 0 0-10 5 5 0 0 0 0 10z"/><path d="M4 22c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>
+            Profile settings
+          </button>
+          <button class="account-menu-item" @click="openAccountSettings">
+            <svg><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            Account preferences
+          </button>
+          <div class="account-menu-divider"></div>
+          <button class="account-menu-item danger" @click="signOut">
+            <svg><path d="M10 17l5-5-5-5"></path><path d="M15 12H3"></path><path d="M21 3v18"></path></svg>
+            Log out
+          </button>
+        </div>
+      </div>
+    </header>
 
     <div v-if="page === 'dashboard'" class="page">
       <h1 style="font-size:28px;font-weight:800;margin-bottom:8px">Dashboard</h1>
@@ -617,13 +1183,15 @@ createApp({
     </div>
 
     <div v-if="page === 'arena'" class="arena-layout">
-      <button class="btn btn-ghost btn-icon hamburger" style="position:absolute;top:12px;left:12px;z-index:100" @click="toggleSidebar">
-        <svg><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-      </button>
-      
       <div class="chat-feed-container">
-        <header class="chat-header" style="padding-left: 56px">
-          <h1>{{ topic || 'New Analysis' }}</h1>
+        <header class="chat-header">
+          <div style="display:flex;flex-direction:column">
+            <h1 style="margin-bottom:2px">{{ topic || 'New Analysis' }}</h1>
+            <div v-if="jobStatus !== 'idle'" style="font-size:12px;color:var(--ink2);display:flex;align-items:center;gap:6px">
+              <div v-if="jobStatus === 'running'" class="dot-pulse"></div>
+              {{ jobMsg }}
+            </div>
+          </div>
           <div style="display:flex;gap:12px;align-items:center">
             <button v-if="jobStatus === 'running'" class="btn btn-secondary btn-sm" @click="interjecting = true">Interject</button>
             <button v-if="jobStatus === 'completed' && !reportSaved" class="btn btn-primary btn-sm" @click="saveReport">Save Report</button>
@@ -646,7 +1214,7 @@ createApp({
             </div>
             <div class="chat-bubble-content">
               <div class="chat-agent-name">{{ entry.name }}</div>
-              <div class="chat-bubble" :class="entry.agent" v-html="marked.parse(entry.text)"></div>
+              <div class="chat-bubble" :class="entry.agent" v-html="renderMarkdownSafe(entry.text)"></div>
             </div>
           </div>
 
@@ -703,7 +1271,29 @@ createApp({
                   Export MD
                 </button>
               </div>
-              <div v-html="marked.parse(summary)" style="font-size:14px;line-height:1.6"></div>
+              <div v-html="renderMarkdownSafe(summary)" style="font-size:14px;line-height:1.6"></div>
+            </div>
+          </div>
+
+          <div v-for="(msg, i) in chatMessages" :key="'chat-'+i" class="chat-bubble-row" :class="{human: msg.role === 'user'}">
+            <div class="chat-avatar" :style="{background: msg.role === 'user' ? AGENT_META.human.color : 'var(--accent)'}">
+              <span v-if="msg.role === 'user'" v-html="AGENT_META.human.icon || AGENT_META.human.initials"></span>
+              <span v-else>AI</span>
+            </div>
+            <div class="chat-bubble-content">
+              <div class="chat-agent-name">{{ msg.role === 'user' ? (profileName || 'You') : (msg.source === 'local' ? 'Local Assistant' : 'Assistant') }}</div>
+              <div class="chat-bubble" :class="msg.role === 'user' ? 'human' : 'assistant'" v-html="renderMarkdownSafe(msg.text)"></div>
+            </div>
+          </div>
+          
+          <div v-if="chatLoading" class="chat-bubble-row">
+            <div class="chat-avatar" style="background:var(--accent)">AI</div>
+            <div class="chat-bubble-content">
+              <div class="chat-agent-name">{{ chatAssistantLabel }}</div>
+              <div style="font-size:12px;color:var(--ink2);margin-bottom:8px">{{ chatAssistantLabel }} is typing...</div>
+              <div class="thinking-bubble">
+                <div class="dot"></div><div class="dot"></div><div class="dot"></div>
+              </div>
             </div>
           </div>
         </div>
@@ -775,8 +1365,8 @@ createApp({
                  class="agent-chip" :class="{active: selectedAgents.includes(id)}"
                  :style="{'--agent-color': meta.color}"
                  @click="toggleAgent(id)">
-              <div class="chip-dot"></div>
-              <div class="chip-name">{{ meta.name.split(' ')[0] }}</div>
+              <div class="chip-avatar" v-html="meta.icon || meta.initials"></div>
+              <div class="chip-name">{{ meta.name }}</div>
             </div>
           </div>
         </div>
@@ -789,38 +1379,55 @@ createApp({
         <div style="height:1px;background:var(--glass-border);margin:8px 0"></div>
 
         <div class="field">
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <label>Input Files</label>
-            <div style="display:flex;gap:6px;align-items:center">
-              <span class="pill">{{ inputFiles.length }}</span>
-              <button class="btn btn-danger btn-sm" @click="clearAllInputs" v-if="inputFiles.length">Clear All</button>
-            </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+          <label>Input Files</label>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+            <span class="pill">{{ inputFiles.length }}</span>
+            <button class="btn btn-secondary btn-sm" @click="createFolder" :disabled="!newFolderName.trim()" title="Create folder">
+              <svg style="width:14px;height:14px"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              Folder
+            </button>
+            <button class="btn btn-ghost btn-icon btn-sm" @click="loadInputFiles" title="Refresh file list">
+              <svg style="width:14px;height:14px"><path d="M23 4v6h-6"></path><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
+            </button>
+            <button class="btn btn-danger btn-sm" @click="clearAllInputs" v-if="inputFiles.length">Clear All</button>
           </div>
+        </div>
           <div class="file-list" style="margin-top:8px">
             <div v-for="f in inputFiles" :key="f.path" class="file-item">
-              <svg style="width:14px;height:14px;color:var(--ink2)"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+              <svg v-if="f.type === 'folder'" style="width:14px;height:14px;color:var(--ink2)"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+              <svg v-else style="width:14px;height:14px;color:var(--ink2)"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
               <span class="file-item-name" :title="f.path">{{ f.path.split('/').pop() }}</span>
+              <span v-if="f.type === 'file'" class="pill" :style="f.analyzable === false ? 'color:var(--warning)' : 'color:var(--success)'">
+                {{ f.analyzable === false ? 'Stored only' : 'Analyzed' }}
+              </span>
               <button class="btn btn-ghost btn-icon btn-sm" @click="deleteInputFileObj(f.path)"><svg style="width:14px;height:14px"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button>
             </div>
           </div>
+          <div v-if="uploadStatus" class="status" style="margin-top:12px">{{ uploadStatus }}</div>
+          <p class="muted" style="font-size:12px;margin-top:10px">Text files and PDFs with readable text are analyzed by the debate engine. Other files stay in the workspace and are still visible here.</p>
         </div>
 
-        <label class="upload-zone">
+        <label class="upload-zone" for="upload-input">
           <svg style="margin:0 auto 8px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
           <div>Click to upload files</div>
-          <input type="file" multiple style="display:none" @change="uploadFile">
         </label>
+        <input id="upload-input" type="file" multiple class="sr-file-input" @change="uploadFile" aria-label="Upload files" accept="*/*">
 
-        <div class="field" style="margin-top:-8px">
-          <div style="display:flex;gap:8px">
+        <div class="field" style="margin-top:12px">
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
             <input v-model="cloneUrl" type="url" placeholder="GitHub URL">
             <button class="btn btn-secondary" @click="cloneRepo">Clone</button>
           </div>
         </div>
         
         <div class="field">
-          <label>Direct Draft</label>
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+            <label>Direct Draft</label>
+          <button class="btn btn-secondary btn-sm" @click="saveDraft" :disabled="!draftContent.trim()">Save Draft</button>
+          </div>
           <textarea v-model="draftContent" placeholder="Paste text here..." style="min-height:80px;font-size:12px"></textarea>
+          <p class="muted" style="font-size:11px">Saves content as web_brief.md</p>
         </div>
       </aside>
     </div>
@@ -835,20 +1442,49 @@ createApp({
             <h2>{{ selectedReport }}</h2>
             <button class="btn btn-secondary btn-sm" @click="downloadReport(selectedReport, reportContent)">Export</button>
           </div>
-          <button class="btn btn-ghost btn-sm" @click="selectedReport=null; reportContent=''">✕ Close</button>
+          <button class="btn btn-ghost btn-sm" @click="closeReport">✕ Close</button>
         </div>
         <div class="report-view" v-html="reportHtml" style="font-size:14px;line-height:1.6;max-height:50vh;overflow-y:auto;padding-right:12px"></div>
+        <div v-if="followupQuestions.length" style="margin-top:18px">
+          <div style="font-size:12px;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink2);margin-bottom:10px">Suggested Follow-Up Questions</div>
+          <div style="display:flex;flex-wrap:wrap;gap:10px">
+            <button
+              v-for="q in followupQuestions"
+              :key="q"
+              class="btn btn-secondary btn-sm"
+              style="text-align:left"
+              @click="chatInput = q"
+            >
+              {{ q }}
+            </button>
+          </div>
+        </div>
         <div class="chat-panel" style="margin-top:20px;border-top:1px solid var(--glass-border);padding-top:20px">
           <h3 style="font-size:14px;margin-bottom:12px">Ask about this report</h3>
-          <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:12px;max-height:200px;overflow-y:auto">
-            <div v-for="(msg, i) in chatMessages" :key="i" style="padding:10px 14px;border-radius:12px;font-size:13px;max-width:85%" :style="msg.role==='user'?'align-self:flex-end;background:var(--accent-glow);border:1px solid var(--accent)':'align-self:flex-start;background:var(--glass-bg);border:1px solid var(--glass-border)'">
-              {{ msg.text }}
+          <div class="history-chat-list">
+            <div v-for="(msg, i) in chatMessages" :key="i" class="history-chat-row" :class="{human: msg.role === 'user'}">
+              <div class="history-chat-avatar">
+                <span v-if="msg.role === 'user'" v-html="AGENT_META.human.icon || AGENT_META.human.initials"></span>
+                <span v-else>AI</span>
+              </div>
+              <div class="history-chat-bubble-wrap">
+                <div class="chat-agent-name">{{ msg.role === 'user' ? (profileName || 'You') : (msg.source === 'local' ? 'Local Assistant' : 'Assistant') }}</div>
+                <div class="chat-bubble" :class="msg.role === 'user' ? 'human' : 'assistant'" v-html="renderMarkdownSafe(msg.text)"></div>
+              </div>
             </div>
-            <div v-if="chatLoading" style="align-self:flex-start;padding:10px 14px;background:var(--glass-bg);border:1px solid var(--glass-border);border-radius:12px;font-size:13px">Thinking...</div>
+            <div v-if="chatLoading" class="history-chat-row">
+              <div class="history-chat-avatar">AI</div>
+              <div class="history-chat-bubble-wrap">
+                <div class="chat-agent-name">{{ chatAssistantLabel }}</div>
+                <div style="font-size:12px;color:var(--ink2);margin-bottom:8px">{{ chatAssistantLabel }} is typing...</div>
+                <div class="thinking-bubble"><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+              </div>
+            </div>
           </div>
-          <div style="display:flex;gap:8px">
+          <div class="history-chat-controls">
             <input v-model="chatInput" type="text" placeholder="Type question..." @keydown.enter="sendChat">
             <button class="btn btn-primary" @click="sendChat" :disabled="chatLoading">Send</button>
+            <button class="btn btn-secondary" @click="saveConversation" :disabled="!chatMessages.length">Save Chat</button>
           </div>
         </div>
       </div>
@@ -907,13 +1543,51 @@ createApp({
             <label>Display Name</label>
             <input v-model="profileName" type="text" @change="saveLocalKeys">
           </div>
+          <div style="display:grid;grid-template-columns:repeat(2, 1fr);gap:12px">
+            <div class="field">
+              <label>Gender</label>
+              <select v-model="profileGender" @change="saveLocalKeys">
+                <option v-for="option in GENDER_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Pronouns</label>
+              <select v-model="profilePronouns" @change="saveLocalKeys">
+                <option v-for="option in PRONOUN_OPTIONS" :key="option.value" :value="option.value">{{ option.label }}</option>
+              </select>
+            </div>
+          </div>
           <div class="field">
-            <label>Avatar Color</label>
+            <label>Avatar Style</label>
+            <select v-model="profileAvatarStyle" @change="saveLocalKeys">
+              <option v-for="option in AVATAR_STYLES" :key="option.value" :value="option.value">{{ option.label }}</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Use GitHub Avatar</label>
+            <label class="check-item" style="flex-direction:row-reverse;justify-content:flex-end;gap:12px">
+              <span>Prefer the GitHub profile image when available</span>
+              <input type="checkbox" v-model="profileUseGithubAvatar" @change="saveLocalKeys">
+            </label>
+          </div>
+          <div class="field">
+            <label>Token Storage</label>
+            <label class="check-item" style="flex-direction:row-reverse;justify-content:flex-end;gap:12px">
+              <span>Store API keys only for this session</span>
+              <input type="checkbox" v-model="sessionOnlyKeys" @change="saveLocalKeys">
+            </label>
+            <p class="muted" style="font-size:12px">Recommended. This keeps provider keys out of persistent browser storage.</p>
+          </div>
+          <div class="field">
+            <button class="btn btn-secondary btn-sm" @click="clearSavedKeys">Clear Saved Keys</button>
+          </div>
+          <div class="field">
+            <label>Avatar Accent</label>
             <div class="avatar-options">
               <div v-for="c in ['#3fb950','#da3633','#388bfd','#ff6b35','#4d9fff','#cc785c','#d4a017','#9b59b6']" :key="c"
                    class="avatar-option" :class="{selected: profileAvatarColor === c}"
                    :style="{background:c}" @click="profileAvatarColor = c; saveLocalKeys()">
-                <img :src="'https://api.dicebear.com/9.x/glass/svg?seed=' + (profileName || user?.github_username || 'Researcher')" alt="Avatar" style="width:100%;border-radius:50%">
+                <img :src="avatarUrl(profileName || user?.github_username || 'Researcher', { gender: profileGender, style: profileAvatarStyle, accent: c })" alt="Avatar" style="width:100%;height:100%;border-radius:50%;object-fit:cover;display:block">
               </div>
             </div>
           </div>
@@ -935,13 +1609,17 @@ createApp({
           <div v-for="provider in ['groq', 'google', 'kimi', 'deepseek', 'claude']" :key="provider" class="field" style="padding-bottom:16px;border-bottom:1px solid var(--glass-border)">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
               <label style="text-transform:capitalize">{{ provider }} API Key</label>
-              <span v-if="keysStatus[provider]" class="pill" :style="keysStatus[provider]==='valid'?'color:var(--success)':keysStatus[provider]==='testing'?'color:var(--accent)':'color:var(--danger)'">
+              <span v-if="keysStatus[provider]" class="pill" :style="keysStatus[provider]==='valid'?'color:var(--success)':keysStatus[provider]==='testing'?'color:var(--accent)':keysStatus[provider]==='limited'?'color:var(--warning)':'color:var(--danger)'">
                 {{ keysStatus[provider] }}
               </span>
             </div>
             <div style="display:flex;gap:8px">
               <input v-model="keys[provider]" type="password" placeholder="Paste key here..." @change="saveLocalKeys">
               <button class="btn btn-secondary" @click="validateKey(provider)" :disabled="!keys[provider] || keysStatus[provider]==='testing'">Test</button>
+            </div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12px;color:var(--ink2)">
+              <span>Estimated rate headroom</span>
+              <span class="pill">{{ getHeadroom(provider) }}%</span>
             </div>
           </div>
         </div>
@@ -950,13 +1628,15 @@ createApp({
           <div class="panel-head"><h2>Account</h2></div>
           <div style="display:flex;align-items:center;gap:16px">
             <div class="user-avatar" :style="{borderColor: profileAvatarColor, width:'64px', height:'64px'}">
-               <img :src="'https://api.dicebear.com/9.x/glass/svg?seed=' + (profileName || user?.github_username || 'Researcher')" alt="User">
+               <img :src="userAvatarSrc" alt="User avatar">
             </div>
             <div>
               <div style="font-weight:700;font-size:16px">{{ user?.github_username }}</div>
+              <div style="font-size:13px;color:var(--ink2)">Gender: {{ profileGender }}</div>
+              <div style="font-size:13px;color:var(--ink2)">Pronouns: {{ profilePronouns }}</div>
               <div style="font-size:13px;color:var(--ink2)">Authenticated via {{ user?.github_username ? 'GitHub' : 'Email' }}</div>
             </div>
-            <a href="/auth/logout" class="btn btn-secondary" style="margin-left:auto">Sign Out</a>
+            <button class="btn btn-secondary" style="margin-left:auto" @click="signOut">Sign Out</button>
           </div>
         </div>
 
@@ -968,96 +1648,233 @@ createApp({
       </div>
     </div>
     
+    <div v-if="page === 'files'" class="page">
+      <h1 style="font-size:28px;font-weight:800;margin-bottom:8px">Resources</h1>
+      <p style="color:var(--ink2);margin-bottom:32px">Manage your uploaded documents and reference materials.</p>
+
+      <div class="stats-grid" style="margin-bottom:24px">
+        <div class="stat-card">
+          <div class="stat-value">{{ inputFiles.length }}</div>
+          <div class="stat-label">Total Files</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">{{ formatBytes(inputFiles.reduce((acc, f) => acc + (f.size || 0), 0)) }}</div>
+          <div class="stat-label">Storage Used</div>
+        </div>
+      </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Your Files</h2>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+              <button class="btn btn-secondary btn-sm" @click="createFolder" :disabled="!newFolderName.trim()" title="Create folder">
+                <svg style="width:14px;height:14px"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                Folder
+              </button>
+              <button class="btn btn-danger btn-sm" @click="clearAllInputs" v-if="inputFiles.length">Delete All</button>
+              <label class="btn btn-primary btn-sm" for="files-page-upload" style="cursor:pointer">
+                <svg style="width:14px;height:14px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                Upload
+                <input id="files-page-upload" type="file" multiple class="sr-only" @change="uploadFile" style="display:none" accept="*/*">
+              </label>
+            </div>
+          </div>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Size</th>
+                <th style="text-align:right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="!inputFiles.length">
+                <td colspan="4" style="text-align:center;padding:48px;color:var(--ink2)">
+                  <svg style="width:48px;height:48px;margin-bottom:16px;opacity:0.2"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                  <p>No files uploaded yet.</p>
+                </td>
+              </tr>
+              <tr v-for="f in inputFiles" :key="f.path">
+                <td style="font-weight:600">
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <svg v-if="f.type === 'folder'" style="width:16px;height:16px;color:var(--accent)"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>
+                    <svg v-else style="width:16px;height:16px;color:var(--ink2)"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
+                    {{ f.path.split('/').pop() }}
+                  </div>
+                </td>
+                <td>
+                  <span v-if="f.type === 'folder'" class="pill">Folder</span>
+                  <span v-else class="pill" :style="f.analyzable === false ? 'color:var(--warning)' : 'color:var(--success)'">
+                    {{ f.analyzable === false ? 'Stored only' : 'Analyzed' }}
+                  </span>
+                </td>
+                <td>{{ formatBytes(f.size || 0) }}</td>
+                <td style="text-align:right">
+                  <button class="btn btn-ghost btn-sm text-danger" @click="deleteInputFileObj(f.path)">Delete</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-if="uploadStatus" class="status" style="margin-top:16px">{{ uploadStatus }}</div>
+      </div>
+
+      <div class="panel" style="margin-top:24px">
+          <div class="panel-head"><h2>Clone Repository</h2></div>
+          <p class="muted" style="margin-bottom:16px;font-size:13px">Import documents directly from a GitHub repository.</p>
+          <div style="display:flex;gap:12px">
+            <input v-model="cloneUrl" type="url" placeholder="https://github.com/user/repo" style="flex:1">
+            <button class="btn btn-secondary" @click="cloneRepo">Clone Repo</button>
+          </div>
+      </div>
+    </div>
+    
     <div v-if="page === 'help'" class="page">
-      <h1 style="font-size:28px;font-weight:800;margin-bottom:8px">Resources & Documentation</h1>
-      <p style="color:var(--ink2);margin-bottom:32px">Master the art of multi-model analysis.</p>
-      
+      <div class="panel" style="margin-bottom:24px;overflow:hidden">
+        <div style="display:grid;grid-template-columns:minmax(0,1.25fr) minmax(280px,0.75fr);gap:24px;align-items:center">
+          <div>
+            <div style="font-size:12px;font-weight:800;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent);margin-bottom:10px">Documentation Hub</div>
+            <h1 style="font-size:34px;font-weight:900;line-height:1.05;margin-bottom:12px">Documentation that helps people move quickly.</h1>
+            <p style="color:var(--ink2);max-width:62ch;line-height:1.7;margin-bottom:20px">
+              Open a guide to see clear steps, practical notes, and a clean path through the workspace. The launcher below is just the doorway.
+            </p>
+            <div style="display:flex;flex-wrap:wrap;gap:10px">
+              <a class="btn btn-primary" href="/docs">Open Docs Site</a>
+              <button class="btn btn-secondary" @click="openDoc('workspace')">Workspace Guide</button>
+              <button class="btn btn-secondary" @click="openDoc('getting-started')">Getting Started</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="docs-launch-grid">
+        <button v-for="doc in docs" :key="doc.slug" class="docs-launch-card" @click="openDoc(doc.slug)">
+          <div class="docs-launch-copy">
+            <div class="docs-launch-title">{{ doc.title }}</div>
+            <div class="docs-launch-summary">{{ doc.summary || 'Open the full guide page.' }}</div>
+          </div>
+          <div class="docs-launch-arrow">↗</div>
+        </button>
+      </div>
+
+      <div class="docs-launch-panels">
+        <div class="panel">
+          <div class="panel-head"><h2>Workflow</h2></div>
+          <div style="display:grid;gap:14px">
+            <p class="muted" style="font-size:13px;line-height:1.7;margin:0">Add material, choose a few agents, run the review, and save what matters. The app is built to keep that flow short and obvious.</p>
+            <p class="muted" style="font-size:13px;line-height:1.7;margin:0">When you want more detail, open the dedicated guides and keep the browser open while you work.</p>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>FAQ</h2></div>
+          <div class="help-faq">
+            <div class="help-faq-item">
+              <strong>Do I need every provider?</strong>
+              <div class="muted" style="font-size:13px;line-height:1.65">No. Start with one provider and add more only if you need them.</div>
+            </div>
+            <div class="help-faq-item">
+              <strong>Can I use the app without understanding the internals?</strong>
+              <div class="muted" style="font-size:13px;line-height:1.65">Yes. The docs are written so people can use the workspace without learning the implementation details.</div>
+            </div>
+            <div class="help-faq-item">
+              <strong>What should I test first?</strong>
+              <div class="muted" style="font-size:13px;line-height:1.65">Upload one file, run one round, and save the report once it finishes.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>Contact</h2></div>
+          <div class="help-contact">
+            <div style="display:grid;gap:10px">
+              <a class="btn btn-primary" href="mailto:ramadhanzome@gmail.com">Email Ramadhan</a>
+              <button class="btn btn-secondary" @click="page='support'; loadSupport()">Open Support Inbox</button>
+              <p class="muted" style="font-size:13px;line-height:1.7;margin:0">A contact chatbot can be added later, but the email and support inbox are the clean defaults for a private repo.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head"><h2>Good first reads</h2></div>
+          <div style="display:grid;gap:12px">
+            <button class="debate-card" style="text-align:left" @click="openDoc('workspace')">
+              <div class="debate-card-body">
+                <div class="debate-card-topic">Workspace Guide</div>
+                <div class="debate-card-meta">Upload examples, folder structure, repo cloning, and saved chats.</div>
+              </div>
+            </button>
+            <button class="debate-card" style="text-align:left" @click="openDoc('web-ui')">
+              <div class="debate-card-body">
+                <div class="debate-card-topic">Web UI Guide</div>
+                <div class="debate-card-meta">What the sidebar, arena, and history screens do.</div>
+              </div>
+            </button>
+            <button class="debate-card" style="text-align:left" @click="openDoc('profiles')">
+              <div class="debate-card-body">
+                <div class="debate-card-topic">Profile Guide</div>
+                <div class="debate-card-meta">How to set identity, avatars, and personalization.</div>
+              </div>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="page === 'support'" class="page">
+      <h1 style="font-size:28px;font-weight:800;margin-bottom:8px">Support</h1>
+      <p style="color:var(--ink2);margin-bottom:32px">Send feedback, report a bug, or leave a product idea for the inbox.</p>
+
       <div class="settings-grid">
         <div class="panel">
-          <h2>Getting Started</h2>
-          <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:20px;margin-top:20px">
-            <div class="stat-card" style="padding:20px">
-                <div class="stat-value" style="font-size:20px">01.</div>
-                <div class="stat-label">Add your API keys in Settings. You need at least one (Groq/Gemini/Copilot) to run a debate.</div>
-            </div>
-            <div class="stat-card" style="padding:20px">
-                <div class="stat-value" style="font-size:20px">02.</div>
-                <div class="stat-label">Upload your input files or clone a repo in the Arena. This provides the context for analysis.</div>
-            </div>
-            <div class="stat-card" style="padding:20px">
-                <div class="stat-value" style="font-size:20px">03.</div>
-                <div class="stat-label">Configure the Goal and Personas, click Run, and watch the agents tear your work apart.</div>
-            </div>
+          <div class="panel-head"><h2>New Note</h2></div>
+          <div class="field">
+            <label>Category</label>
+            <select v-model="supportCategory">
+              <option value="feedback">Feedback</option>
+              <option value="bug">Bug Report</option>
+              <option value="idea">Idea</option>
+              <option value="question">Question</option>
+              <option value="security">Security</option>
+            </select>
           </div>
-        </div>
-        
-        <div class="panel">
-          <h2>Prompt Library (Topic Examples)</h2>
-          <div style="display:grid;gap:12px;margin-top:16px">
-            <div class="debate-card" style="cursor:default" @click="topic='Review the security and scalability of this codebase. Find at least 3 critical vulnerabilities.'">
-                <div class="debate-card-body">
-                    <div class="debate-card-topic">🛡️ Security Auditor</div>
-                    <div class="debate-card-meta">'Review the security and scalability of this codebase. Find at least 3 critical vulnerabilities.'</div>
-                </div>
-            </div>
-            <div class="debate-card" style="cursor:default" @click="topic='Critique this business plan from a VC perspective. Be harsh about the unit economics and market fit.'">
-                <div class="debate-card-body">
-                    <div class="debate-card-topic">💰 VC Pitch Roaster</div>
-                    <div class="debate-card-meta">'Critique this business plan from a VC perspective. Be harsh about the unit economics and market fit.'</div>
-                </div>
-            </div>
-            <div class="debate-card" style="cursor:default" @click="topic='Summarize the key findings of this paper and identify any data that contradicts the authors conclusion.'">
-                <div class="debate-card-body">
-                    <div class="debate-card-topic">🔬 Academic Peer Review</div>
-                    <div class="debate-card-meta">'Summarize the key findings of this paper and identify any data that contradicts the authors conclusion.'</div>
-                </div>
-            </div>
+          <div class="field">
+            <label>Subject</label>
+            <input v-model="supportSubject" type="text" placeholder="Short summary">
           </div>
+          <div class="field">
+            <label>Contact</label>
+            <input v-model="supportContact" type="text" placeholder="Email or GitHub handle">
+          </div>
+          <div class="field">
+            <label>Message</label>
+            <textarea v-model="supportMessage" rows="6" placeholder="What should improve? What broke? What would make this easier?"></textarea>
+          </div>
+          <button class="btn btn-primary" @click="submitSupport" :disabled="supportSubmitting || !supportMessage.trim()">
+            {{ supportSubmitting ? 'Sending...' : 'Send to Inbox' }}
+          </button>
         </div>
 
         <div class="panel">
-          <h2>System Architecture</h2>
-          <div style="margin-top:20px;background:rgba(0,0,0,0.2);padding:20px;border-radius:12px;font-family:monospace;font-size:12px;white-space:pre;overflow-x:auto">
-[Your Browser] --- (Encrypted Keys) ---&gt; [FastAPI Server]
-      |                                     |
-      | (Polling)                           | (Orchestration)
-      v                                     v
-[UI Progress] &lt;--- (Job Stats) --- [Agents Loop (RL Sorted)]
-                                            |
-                                  +---------+---------+
-                                  |         |         |
-                               [GPT]    [Claude]   [Llama]
+          <div class="panel-head">
+            <h2>Inbox</h2>
+            <button class="btn btn-secondary btn-sm" @click="loadSupport">Refresh</button>
           </div>
-          <p style="margin-top:16px;font-size:14px;line-height:1.6;color:var(--ink2)">
-            Debate Lab uses a Reinforcement Learning (RL) engine to track which models produce the most logically sound and specific arguments. Over time, the best models are automatically moved to the "Rebuttal" phase of the debate to provide the highest quality counters.
-          </p>
-        </div>
-
-        <div class="panel">
-          <h2>Keyboard Shortcuts</h2>
-          <div class="table-wrapper" style="margin-top:16px">
-            <table class="data-table">
-              <thead><tr><th>Action</th><th>Shortcut</th></tr></thead>
-              <tbody>
-                <tr><td>Run Analysis</td><td><code>Cmd + Enter</code></td></tr>
-                <tr><td>Close Config Panel</td><td><code>Esc</code></td></tr>
-                <tr><td>Focus Topic Input</td><td><code>Cmd + K</code></td></tr>
-                <tr><td>Toggle Theme</td><td><code>Cmd + T</code></td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <div class="panel">
-          <h2>Frequently Asked Questions</h2>
-          <div style="display:grid;gap:20px;margin-top:16px">
-            <div>
-              <div style="font-weight:700;margin-bottom:4px">Are my API keys safe?</div>
-              <div class="muted" style="font-size:13px">Yes. Keys are stored locally in your browser. If you enable "Session-Only" mode, they are deleted automatically when you close the tab.</div>
-            </div>
-            <div>
-              <div style="font-weight:700;margin-bottom:4px">How many agents can I run at once?</div>
-              <div class="muted" style="font-size:13px">You can run up to all 6 models simultaneously, plus your own "Human" interjections.</div>
+          <div v-if="!supportItems.length" class="muted" style="font-size:13px;line-height:1.7">No support notes yet. Once people start sending ideas, they will show up here.</div>
+          <div v-else style="display:grid;gap:12px">
+            <div v-for="item in supportItems" :key="item.id" class="debate-card" style="text-align:left;padding:16px 18px">
+              <div class="debate-card-body" style="gap:8px">
+                <div class="debate-card-topic" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                  <span class="pill">{{ item.category || 'feedback' }}</span>
+                  {{ item.subject || 'Support note' }}
+                </div>
+                <div class="debate-card-meta">
+                  {{ item.github_username || item.contact || 'Anonymous' }} · {{ timeAgo(item.created_at) }}
+                </div>
+                <div style="color:var(--ink2);font-size:13px;line-height:1.65;white-space:pre-wrap">{{ item.message }}</div>
+              </div>
             </div>
           </div>
         </div>

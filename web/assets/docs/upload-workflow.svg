@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 540" role="img" aria-label="Upload workflow diagram">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#f8fbff"/>
+      <stop offset="100%" stop-color="#eef3fb"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#161b22"/>
+      <stop offset="100%" stop-color="#0d1117"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="540" rx="28" fill="url(#bg)"/>
+  <rect x="56" y="48" width="788" height="444" rx="28" fill="url(#panel)" stroke="#d0d7de"/>
+  <rect x="92" y="84" width="240" height="372" rx="20" fill="#21262d" stroke="#30363d"/>
+  <rect x="358" y="84" width="170" height="372" rx="20" fill="#161b22" stroke="#30363d"/>
+  <rect x="554" y="84" width="258" height="372" rx="20" fill="#21262d" stroke="#30363d"/>
+
+  <text x="118" y="122" fill="#c9d1d9" font-size="24" font-family="Inter, Arial, sans-serif" font-weight="700">Upload</text>
+  <rect x="124" y="150" width="128" height="124" rx="18" fill="none" stroke="#58a6ff" stroke-dasharray="10 10" stroke-width="3"/>
+  <path d="M188 176v56" stroke="#58a6ff" stroke-width="6" stroke-linecap="round"/>
+  <path d="M164 200l24-24 24 24" fill="none" stroke="#58a6ff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="120" y="314" fill="#8b949e" font-size="16" font-family="Inter, Arial, sans-serif">Drop files or click to add</text>
+  <rect x="124" y="344" width="128" height="44" rx="22" fill="#238636"/>
+  <text x="188" y="372" fill="#fff" font-size="16" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-weight="700">Save</text>
+
+  <text x="388" y="122" fill="#c9d1d9" font-size="24" font-family="Inter, Arial, sans-serif" font-weight="700">Organize</text>
+  <rect x="394" y="162" width="94" height="34" rx="12" fill="rgba(63,185,80,0.16)" stroke="#3fb950"/>
+  <rect x="394" y="208" width="128" height="34" rx="12" fill="rgba(88,166,255,0.16)" stroke="#58a6ff"/>
+  <rect x="394" y="254" width="150" height="34" rx="12" fill="rgba(248,195,81,0.16)" stroke="#f8c351"/>
+  <rect x="394" y="300" width="112" height="34" rx="12" fill="rgba(255,123,86,0.16)" stroke="#ff7b56"/>
+  <text x="441" y="184" fill="#c9d1d9" font-size="14" text-anchor="middle" font-family="Inter, Arial, sans-serif">drafts</text>
+  <text x="458" y="230" fill="#c9d1d9" font-size="14" text-anchor="middle" font-family="Inter, Arial, sans-serif">research-notes</text>
+  <text x="469" y="276" fill="#c9d1d9" font-size="14" text-anchor="middle" font-family="Inter, Arial, sans-serif">conversations</text>
+  <text x="450" y="322" fill="#c9d1d9" font-size="14" text-anchor="middle" font-family="Inter, Arial, sans-serif">exports</text>
+  <path d="M340 270h18" stroke="#8b949e" stroke-width="4" stroke-linecap="round"/>
+  <path d="M530 270h18" stroke="#8b949e" stroke-width="4" stroke-linecap="round"/>
+
+  <text x="586" y="122" fill="#c9d1d9" font-size="24" font-family="Inter, Arial, sans-serif" font-weight="700">Run</text>
+  <rect x="592" y="160" width="174" height="64" rx="18" fill="rgba(63,185,80,0.14)" stroke="#3fb950"/>
+  <text x="679" y="196" fill="#c9d1d9" font-size="16" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-weight="700">Start debate</text>
+  <rect x="592" y="248" width="174" height="64" rx="18" fill="rgba(88,166,255,0.14)" stroke="#58a6ff"/>
+  <text x="679" y="284" fill="#c9d1d9" font-size="16" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-weight="700">Save report</text>
+  <rect x="592" y="336" width="174" height="64" rx="18" fill="rgba(248,195,81,0.14)" stroke="#f8c351"/>
+  <text x="679" y="372" fill="#c9d1d9" font-size="16" text-anchor="middle" font-family="Inter, Arial, sans-serif" font-weight="700">Save chat</text>
+</svg>

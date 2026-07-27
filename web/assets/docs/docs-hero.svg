@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 420" role="img" aria-label="Documentation illustration">
+  <defs>
+    <linearGradient id="bg" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#1d2430"/>
+      <stop offset="100%" stop-color="#0f1117"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0%" stop-color="#3fb950"/>
+      <stop offset="100%" stop-color="#2ea043"/>
+    </linearGradient>
+  </defs>
+  <rect width="720" height="420" rx="28" fill="url(#bg)"/>
+  <rect x="56" y="54" width="608" height="312" rx="22" fill="#161b22" stroke="#30363d"/>
+  <rect x="84" y="84" width="170" height="248" rx="16" fill="#0d1117" stroke="#30363d"/>
+  <rect x="274" y="84" width="360" height="68" rx="16" fill="#0d1117" stroke="#30363d"/>
+  <rect x="274" y="166" width="360" height="166" rx="16" fill="#0d1117" stroke="#30363d"/>
+  <rect x="108" y="112" width="124" height="14" rx="7" fill="#c9d1d9"/>
+  <rect x="108" y="136" width="88" height="10" rx="5" fill="#8b949e"/>
+  <rect x="108" y="170" width="108" height="10" rx="5" fill="#8b949e"/>
+  <rect x="108" y="194" width="78" height="10" rx="5" fill="#8b949e"/>
+  <rect x="108" y="228" width="112" height="10" rx="5" fill="#8b949e"/>
+  <rect x="108" y="252" width="64" height="10" rx="5" fill="#8b949e"/>
+  <circle cx="150" cy="286" r="18" fill="url(#accent)"/>
+  <path d="M141 286l7 7 13-17" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="308" y="108" width="200" height="14" rx="7" fill="#c9d1d9"/>
+  <rect x="308" y="132" width="150" height="10" rx="5" fill="#8b949e"/>
+  <rect x="308" y="186" width="282" height="10" rx="5" fill="#8b949e"/>
+  <rect x="308" y="210" width="250" height="10" rx="5" fill="#8b949e"/>
+  <rect x="308" y="234" width="224" height="10" rx="5" fill="#8b949e"/>
+  <rect x="308" y="258" width="268" height="10" rx="5" fill="#8b949e"/>
+  <rect x="308" y="282" width="180" height="10" rx="5" fill="#8b949e"/>
+  <rect x="540" y="108" width="54" height="30" rx="15" fill="rgba(63,185,80,0.16)" stroke="#3fb950"/>
+  <rect x="540" y="148" width="54" height="30" rx="15" fill="rgba(88,166,255,0.16)" stroke="#58a6ff"/>
+  <rect x="540" y="188" width="54" height="30" rx="15" fill="rgba(248,195,81,0.16)" stroke="#f8c351"/>
+  <rect x="540" y="228" width="54" height="30" rx="15" fill="rgba(255,123,86,0.16)" stroke="#ff7b56"/>
+  <path d="M74 346h572" stroke="#30363d" stroke-width="2"/>
+</svg>
