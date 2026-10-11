@@ -19,6 +19,7 @@ from debate_config import (
 
 # Q-TABLE MANAGER
 
+
 class QTableManager:
     """
     Manages the Q-table for the debate system.
@@ -62,8 +63,7 @@ class QTableManager:
         if random.random() < EPSILON:
             return random.choice(possible_actions)
         q_values = {
-            action: self.get_q_value(state, action)
-            for action in possible_actions
+            action: self.get_q_value(state, action) for action in possible_actions
         }
         return max(q_values, key=q_values.get)
 
@@ -89,7 +89,11 @@ class QTableManager:
             best_action = max(actions, key=actions.get) if actions else None
             for action, q_val in actions.items():
                 if action not in stats:
-                    stats[action] = {"total_debates": 0, "total_reward": 0.0, "win_count": 0}
+                    stats[action] = {
+                        "total_debates": 0,
+                        "total_reward": 0.0,
+                        "win_count": 0,
+                    }
                 stats[action]["total_debates"] += 1
                 stats[action]["total_reward"] += q_val
                 if action == best_action:
@@ -97,18 +101,23 @@ class QTableManager:
 
         result = []
         for agent in AGENTS:
-            if agent == "human": continue
-            agent_stats = stats.get(agent, {"total_debates": 0, "total_reward": 0.0, "win_count": 0})
+            if agent == "human":
+                continue
+            agent_stats = stats.get(
+                agent, {"total_debates": 0, "total_reward": 0.0, "win_count": 0}
+            )
             total = agent_stats["total_debates"]
             avg_reward = agent_stats["total_reward"] / total if total > 0 else 0.0
             win_rate = agent_stats["win_count"] / total if total > 0 else 0.0
-            result.append({
-                "agent": agent,
-                "name": AGENTS[agent],
-                "total_debates": total,
-                "avg_score": round(avg_reward * 100),
-                "win_rate": round(win_rate * 100)
-            })
+            result.append(
+                {
+                    "agent": agent,
+                    "name": AGENTS[agent],
+                    "total_debates": total,
+                    "avg_score": round(avg_reward * 100),
+                    "win_rate": round(win_rate * 100),
+                }
+            )
         return result
 
     def get_best_agent_order(self, agents: list) -> list:
@@ -122,15 +131,20 @@ class QTableManager:
                 if action in agent_scores:
                     agent_scores[action] += q_val
                     agent_counts[action] += 1
-        
+
         avg_scores = {
-            agent: agent_scores[agent] / agent_counts[agent] if agent_counts[agent] > 0 else 0.0
+            agent: (
+                agent_scores[agent] / agent_counts[agent]
+                if agent_counts[agent] > 0
+                else 0.0
+            )
             for agent in agents
         }
         return sorted(agents, key=lambda a: avg_scores[a], reverse=True)
 
 
 # ARGUMENT SCORER
+
 
 class ArgumentScorer:
     """
@@ -172,6 +186,7 @@ No explanation, just the JSON."""
 
         try:
             from groq import Groq
+
             client = Groq(api_key=GROQ_API_KEY, timeout=TIME_LIMIT, max_retries=0)
             response = client.chat.completions.create(
                 model=GROQ_MODEL,
@@ -210,17 +225,54 @@ No explanation, just the JSON."""
         context_terms = set(re.findall(r"\w+", context.lower()))
         length = len(words)
 
-        evidence_markers = ["file", "section", "proposal", "method", "abstract", "research", "because"]
-        response_markers = ["agree", "disagree", "however", "but", "respond", "missed", "others"]
-        logic_markers = ["therefore", "because", "however", "if", "then", "conclusion", "limitation"]
+        evidence_markers = [
+            "file",
+            "section",
+            "proposal",
+            "method",
+            "abstract",
+            "research",
+            "because",
+        ]
+        response_markers = [
+            "agree",
+            "disagree",
+            "however",
+            "but",
+            "respond",
+            "missed",
+            "others",
+        ]
+        logic_markers = [
+            "therefore",
+            "because",
+            "however",
+            "if",
+            "then",
+            "conclusion",
+            "limitation",
+        ]
 
         overlap = len(unique_words & context_terms) / max(len(unique_words), 1)
-        evidence = min(1.0, overlap * 2 + sum(marker in argument.lower() for marker in evidence_markers) * 0.08)
-        responsiveness = min(1.0, sum(marker in argument.lower() for marker in response_markers) * 0.18 + 0.35)
+        evidence = min(
+            1.0,
+            overlap * 2
+            + sum(marker in argument.lower() for marker in evidence_markers) * 0.08,
+        )
+        responsiveness = min(
+            1.0,
+            sum(marker in argument.lower() for marker in response_markers) * 0.18
+            + 0.35,
+        )
         specificity = min(1.0, length / 500 + evidence * 0.35)
         new_information = min(1.0, len(unique_words) / max(length, 1) + 0.15)
-        logical_soundness = min(1.0, 0.45 + sum(marker in argument.lower() for marker in logic_markers) * 0.1)
-        persuasiveness = min(1.0, (specificity + evidence + logical_soundness) / 3 + 0.1)
+        logical_soundness = min(
+            1.0,
+            0.45 + sum(marker in argument.lower() for marker in logic_markers) * 0.1,
+        )
+        persuasiveness = min(
+            1.0, (specificity + evidence + logical_soundness) / 3 + 0.1
+        )
 
         return {
             "specificity": specificity,

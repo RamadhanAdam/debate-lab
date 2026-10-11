@@ -21,7 +21,7 @@ INPUT_DIR = ROOT / "input"
 DEBATES_DIR.mkdir(exist_ok=True)
 INPUT_DIR.mkdir(exist_ok=True)
 
-# API keys 
+# API keys
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", None)
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", None)
 KIMI_API_KEY = os.getenv("KIMI_API_KEY", None)
@@ -42,31 +42,41 @@ ROUNDS = 3  # Number of debate rounds
 MAX_TURNS = 5  # Max turns per round
 TIME_LIMIT = 60  # Time limit per turn in seconds
 
-MODES = ["review", "debate", "business", "creative", "technical"]  # Available modes of operation
-DEFAULT_MODE = "review"  
+MODES = [
+    "review",
+    "debate",
+    "business",
+    "creative",
+    "technical",
+]  # Available modes of operation
+DEFAULT_MODE = "review"
 
 GOALS = {
     "rounds": "Complete the fixed number of rounds.",
     "consensus": "Debate until a unanimous consensus is reached on the core issues.",
     "flaws": "Identify and agree upon exactly 3-5 critical flaws in the input.",
-    "brainstorm": "Generate as many unique, viable alternative solutions as possible."
+    "brainstorm": "Generate as many unique, viable alternative solutions as possible.",
 }
 
 PERSONAS = {
     "balanced": "You are a balanced, objective analyst.",
     "skeptic": "You are a harsh skeptic. You look for holes, edge cases, and worst-case scenarios.",
     "optimist": "You are an optimist. You look for the best potential, scalability, and positive impact.",
-    "compliance": "You are a strict compliance and legal officer. You focus on rules, risks, and standards."
+    "compliance": "You are a strict compliance and legal officer. You focus on rules, risks, and standards.",
 }
 
 
 # Q-Learning settings
-LEARNING_RATE = 0.1 # How fast the Q-values are updated after each debate
-DISCOUNT_FACTOR = 0.9 # How much future rewards are valued compared to immediate rewards
-EPSILON = 0.2 # Exploration rate for action selection (20% of the time, choose a random action, i.e system tries something different instead of what it knows works)
+LEARNING_RATE = 0.1  # How fast the Q-values are updated after each debate
+DISCOUNT_FACTOR = (
+    0.9  # How much future rewards are valued compared to immediate rewards
+)
+EPSILON = 0.2  # Exploration rate for action selection (20% of the time, choose a random action, i.e system tries something different instead of what it knows works)
 # This is how it discovers better strategies over time instead of getting stuck. The other 80% it exploits what it already learned.
 
-Q_TABLE_FILE = ROOT / "q_table.json" # File to save the Q-table for learning across debates. Meaning learning persists between runs
+Q_TABLE_FILE = (
+    ROOT / "q_table.json"
+)  # File to save the Q-table for learning across debates. Meaning learning persists between runs
 # Every debate the system makes is slightly smarter about which arguments are best
 
 # Scoring Criteria
@@ -77,12 +87,12 @@ Together they capture what makes a good argument: it is specific, it responds to
 is logically sound."""
 
 SCORING_CRITERIA = [
-    "specificity",       # did the argument make specific concrete points
-    "responsiveness",    # did it actually respond to what others said
-    "evidence",          # did it cite evidence from the files
-    "new_information",   # did it introduce something not said before
-    "logical_soundness", # is the argument logically consistent
-    "persuasiveness"     # how convincing is the argument overall
+    "specificity",  # did the argument make specific concrete points
+    "responsiveness",  # did it actually respond to what others said
+    "evidence",  # did it cite evidence from the files
+    "new_information",  # did it introduce something not said before
+    "logical_soundness",  # is the argument logically consistent
+    "persuasiveness",  # how convincing is the argument overall
 ]
 
 

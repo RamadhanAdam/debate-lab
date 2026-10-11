@@ -5,6 +5,7 @@
 # and saves everything as artifacts.
 
 import os
+
 os.environ["GRPC_VERBOSITY"] = "ERROR"
 os.environ["GLOG_minloglevel"] = "2"
 
@@ -32,6 +33,7 @@ from reward import q_manager, scorer
 
 # FILE LOADER
 
+
 def load_input_files(user_id: str = None) -> str:
     """
     Load all files from the input directory and return them as one string.
@@ -40,7 +42,7 @@ def load_input_files(user_id: str = None) -> str:
     """
     supported = {".txt", ".md", ".py", ".ts", ".js", ".json", ".csv"}
     files = []
-    
+
     target_dir = INPUT_DIR / user_id if user_id else INPUT_DIR
 
     if not target_dir.exists():
@@ -69,20 +71,23 @@ def list_input_files(user_id: str = None) -> list:
     supported = {".txt", ".md", ".py", ".ts", ".js", ".json", ".csv"}
     files = []
     target_dir = INPUT_DIR / user_id if user_id else INPUT_DIR
-    
+
     if not target_dir.exists():
         return []
-        
+
     for path in sorted(target_dir.rglob("*")):
         if path.is_file() and path.suffix in supported:
-            files.append({
-                "path": str(path.relative_to(target_dir)),
-                "size": path.stat().st_size,
-            })
+            files.append(
+                {
+                    "path": str(path.relative_to(target_dir)),
+                    "size": path.stat().st_size,
+                }
+            )
     return files
 
 
 # HUMAN PARTICIPANT
+
 
 async def get_human_input(round_num: int) -> str | None:
     """
@@ -111,6 +116,7 @@ async def get_human_input(round_num: int) -> str | None:
 
 # DEBATE STATE
 
+
 def build_state(round_num: int, mode: str, arguments_so_far: list) -> str:
     """
     Build a string representation of the current debate state.
@@ -121,6 +127,7 @@ def build_state(round_num: int, mode: str, arguments_so_far: list) -> str:
 
 
 # ROUND RUNNER
+
 
 async def run_round(
     agents: list,
@@ -148,15 +155,28 @@ async def run_round(
     print(f"{'='*60}\n")
 
     round_arguments = []
-    
+
     # Sort agents by historical best order
-    ordered_agents = [agent for agent_name in q_manager.get_best_agent_order([a.name for a in agents]) for agent in agents if agent.name == agent_name]
+    ordered_agents = [
+        agent
+        for agent_name in q_manager.get_best_agent_order([a.name for a in agents])
+        for agent in agents
+        if agent.name == agent_name
+    ]
 
     if round_num == 1:
         # Round 1: all agents argue at the same time
         print("All agents arguing simultaneously...\n")
         tasks = [
-            agent.argue(topic, context, round_num, mode, previous_arguments, goal=goal, persona=persona)
+            agent.argue(
+                topic,
+                context,
+                round_num,
+                mode,
+                previous_arguments,
+                goal=goal,
+                persona=persona,
+            )
             for agent in ordered_agents
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -164,13 +184,14 @@ async def run_round(
         for agent, result in zip(ordered_agents, results):
             if isinstance(result, Exception):
                 warning = f"{agent.display_name} failed in round {round_num}: {result}"
-                if run_warnings is not None: run_warnings.append(warning)
+                if run_warnings is not None:
+                    run_warnings.append(warning)
                 print(f"\n{agent.display_name}: skipped ({result})\n")
                 continue
 
             argument = result
             round_arguments.append((agent.display_name, argument))
-            if on_argument: 
+            if on_argument:
                 on_argument(agent.display_name, argument)
             print(f"\n{agent.display_name}:\n{argument}\n")
 
@@ -191,11 +212,18 @@ async def run_round(
             print(f"\n{agent.display_name} is arguing...\n")
             try:
                 argument = await agent.argue(
-                    topic, context, round_num, mode, previous_arguments, goal=goal, persona=persona
+                    topic,
+                    context,
+                    round_num,
+                    mode,
+                    previous_arguments,
+                    goal=goal,
+                    persona=persona,
                 )
             except Exception as e:
                 warning = f"{agent.display_name} failed in round {round_num}: {e}"
-                if run_warnings is not None: run_warnings.append(warning)
+                if run_warnings is not None:
+                    run_warnings.append(warning)
                 print(f"{agent.display_name}: skipped ({e})\n")
                 continue
             round_arguments.append((agent.display_name, argument))
@@ -211,10 +239,12 @@ async def run_round(
                 human_argument = await human_input_hook(round_num)
             else:
                 loop = asyncio.get_event_loop()
-                human_argument = await loop.run_in_executor(None, human_input_hook, round_num)
+                human_argument = await loop.run_in_executor(
+                    None, human_input_hook, round_num
+                )
         else:
             human_argument = await get_human_input(round_num)
-            
+
         if human_argument:
             round_arguments.append(("Human", human_argument))
             if on_argument:
@@ -225,6 +255,7 @@ async def run_round(
 
 
 # SUMMARY HELPERS
+
 
 def compute_agent_averages(scores: list) -> dict:
     """
@@ -243,11 +274,15 @@ def compute_agent_averages(scores: list) -> dict:
     }
 
 
-def build_fallback_summary(topic: str, all_rounds: list, scores: list, run_warnings: list) -> str:
+def build_fallback_summary(
+    topic: str, all_rounds: list, scores: list, run_warnings: list
+) -> str:
     """
     Build a deterministic summary when the moderator model is unavailable.
     """
-    agents_seen = sorted({agent for round_args in all_rounds for agent, _ in round_args})
+    agents_seen = sorted(
+        {agent for round_args in all_rounds for agent, _ in round_args}
+    )
     agent_averages = compute_agent_averages(scores)
     best_agent = max(agent_averages, key=agent_averages.get) if agent_averages else None
 
@@ -263,30 +298,38 @@ def build_fallback_summary(topic: str, all_rounds: list, scores: list, run_warni
     ]
 
     if best_agent:
-        lines.extend([
-            "",
-            "Strongest scored reviewer:",
-            f"- {best_agent} with an average score of {agent_averages[best_agent]:.2f}.",
-        ])
+        lines.extend(
+            [
+                "",
+                "Strongest scored reviewer:",
+                f"- {best_agent} with an average score of {agent_averages[best_agent]:.2f}.",
+            ]
+        )
 
     if agents_seen:
-        lines.extend([
-            "",
-            "Participating agents:",
-            "- " + ", ".join(agents_seen),
-        ])
+        lines.extend(
+            [
+                "",
+                "Participating agents:",
+                "- " + ", ".join(agents_seen),
+            ]
+        )
 
     if run_warnings:
-        lines.extend([
-            "",
-            "Run warnings:",
-            f"- {len(run_warnings)} provider or scoring warning(s) occurred; see the warnings section.",
-        ])
+        lines.extend(
+            [
+                "",
+                "Run warnings:",
+                f"- {len(run_warnings)} provider or scoring warning(s) occurred; see the warnings section.",
+            ]
+        )
 
     return "\n".join(lines)
 
 
-def build_moderator_summary(topic: str, mode: str, all_rounds: list, scores: list, run_warnings: list) -> str:
+def build_moderator_summary(
+    topic: str, mode: str, all_rounds: list, scores: list, run_warnings: list
+) -> str:
     """
     Ask Groq to write a concise moderator summary. Fall back to a deterministic summary
     if Groq is unavailable.
@@ -318,6 +361,7 @@ Do not mention provider errors unless they affected the debate."""
 
     try:
         from groq import Groq
+
         client = Groq(api_key=GROQ_API_KEY, timeout=TIME_LIMIT, max_retries=0)
         response = client.chat.completions.create(
             model=GROQ_MODEL,
@@ -326,7 +370,10 @@ Do not mention provider errors unless they affected the debate."""
         )
         summary = response.choices[0].message.content.strip()
         lines = summary.splitlines()
-        if lines and lines[0].strip().lstrip("#").strip().lower() == "executive summary":
+        if (
+            lines
+            and lines[0].strip().lstrip("#").strip().lower() == "executive summary"
+        ):
             summary = "\n".join(lines[1:]).strip()
         return summary
     except Exception:
@@ -335,7 +382,15 @@ Do not mention provider errors unless they affected the debate."""
 
 # ARTIFACT SAVER
 
-def save_artifact(topic: str, mode: str, all_rounds: list, scores: list, run_warnings: list, moderator_summary: str):
+
+def save_artifact(
+    topic: str,
+    mode: str,
+    all_rounds: list,
+    scores: list,
+    run_warnings: list,
+    moderator_summary: str,
+):
     """
     Save the complete debate as a markdown artifact.
     Each debate gets its own timestamped file.
@@ -396,6 +451,7 @@ def save_artifact(topic: str, mode: str, all_rounds: list, scores: list, run_war
 
 # MAIN DEBATE RUNNER
 
+
 async def run_debate(
     topic: str = None,
     mode: str = DEFAULT_MODE,
@@ -430,7 +486,7 @@ async def run_debate(
     print(f"{'='*60}\n")
 
     selected_agents = selected_agents or ["gpt", "groq", "gemini"]
-    # We no longer select agents randomly or rank them and exclude some. 
+    # We no longer select agents randomly or rank them and exclude some.
     # If the user selects them, we use them all. We just sort them later in run_round.
     agents = []
     for agent_name in selected_agents:
@@ -443,7 +499,9 @@ async def run_debate(
             print(f"Skipping {AGENTS[agent_name]}: {e}")
 
     if not agents:
-        raise RuntimeError("No agents are available. Check your API keys and GitHub CLI login.")
+        raise RuntimeError(
+            "No agents are available. Check your API keys and GitHub CLI login."
+        )
 
     for agent in agents:
         agent.reset()
@@ -477,23 +535,33 @@ async def run_debate(
                 state = build_state(round_num, mode, all_arguments)
                 score_result = scorer.score(argument, context)
                 if score_result.get("warning"):
-                    run_warnings.append(f"Scoring failed for {agent_name} in round {round_num}: {score_result['warning']}")
-                all_scores.append({
-                    "agent": agent_name,
-                    "round": round_num,
-                    "scores": score_result["scores"],
-                    "average": score_result["average"],
-                })
+                    run_warnings.append(
+                        f"Scoring failed for {agent_name} in round {round_num}: {score_result['warning']}"
+                    )
+                all_scores.append(
+                    {
+                        "agent": agent_name,
+                        "round": round_num,
+                        "scores": score_result["scores"],
+                        "average": score_result["average"],
+                    }
+                )
 
-                next_state = build_state(round_num + 1, mode, all_arguments + [(agent_name, argument)])
+                next_state = build_state(
+                    round_num + 1, mode, all_arguments + [(agent_name, argument)]
+                )
                 q_manager.update(state, agent_name, score_result["average"], next_state)
 
         all_arguments.extend(round_arguments)
 
     q_manager.save()
 
-    moderator_summary = build_moderator_summary(topic, mode, all_rounds, all_scores, run_warnings)
-    artifact_path = save_artifact(topic, mode, all_rounds, all_scores, run_warnings, moderator_summary)
+    moderator_summary = build_moderator_summary(
+        topic, mode, all_rounds, all_scores, run_warnings
+    )
+    artifact_path = save_artifact(
+        topic, mode, all_rounds, all_scores, run_warnings, moderator_summary
+    )
 
     print(f"\nDebate complete. Artifact saved to {artifact_path}")
     return {
@@ -507,7 +575,9 @@ async def run_debate(
         "scores": all_scores,
         "agent_averages": compute_agent_averages(all_scores),
         "summary": moderator_summary,
-        "rounds_data": [[list(entry) for entry in round_args] for round_args in all_rounds],
+        "rounds_data": [
+            [list(entry) for entry in round_args] for round_args in all_rounds
+        ],
     }
 
 
@@ -517,19 +587,43 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Run a multi-model debate.")
-    parser.add_argument("--topic", type=str, default=None, help="Topic to debate. Defaults to reviewing input files.")
-    parser.add_argument("--mode", type=str, default=DEFAULT_MODE, choices=MODES, help="Debate mode: review or debate.")
-    parser.add_argument("--no-human", action="store_true", help="Skip human participation.")
-    parser.add_argument("--agents", type=str, default="gpt,groq,gemini", help="Comma-separated agents to run: gpt, groq, gemini.")
-    parser.add_argument("--rounds", type=int, default=ROUNDS, help="Number of debate rounds.")
+    parser.add_argument(
+        "--topic",
+        type=str,
+        default=None,
+        help="Topic to debate. Defaults to reviewing input files.",
+    )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default=DEFAULT_MODE,
+        choices=MODES,
+        help="Debate mode: review or debate.",
+    )
+    parser.add_argument(
+        "--no-human", action="store_true", help="Skip human participation."
+    )
+    parser.add_argument(
+        "--agents",
+        type=str,
+        default="gpt,groq,gemini",
+        help="Comma-separated agents to run: gpt, groq, gemini.",
+    )
+    parser.add_argument(
+        "--rounds", type=int, default=ROUNDS, help="Number of debate rounds."
+    )
     args = parser.parse_args()
-    selected_agents = [agent.strip() for agent in args.agents.split(",") if agent.strip()]
+    selected_agents = [
+        agent.strip() for agent in args.agents.split(",") if agent.strip()
+    ]
 
-    result = asyncio.run(run_debate(
-        topic=args.topic,
-        mode=args.mode,
-        include_human=not args.no_human,
-        selected_agents=selected_agents,
-        rounds=args.rounds,
-    ))
+    result = asyncio.run(
+        run_debate(
+            topic=args.topic,
+            mode=args.mode,
+            include_human=not args.no_human,
+            selected_agents=selected_agents,
+            rounds=args.rounds,
+        )
+    )
     print(f"Result: {result['artifact_path']}")
