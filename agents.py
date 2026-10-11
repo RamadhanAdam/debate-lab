@@ -52,7 +52,16 @@ class BaseAgent(ABC):
     def add_to_history(self, argument: str):
         self.history.append(argument)
 
-    def build_prompt(self, topic: str, context: str, round_num: int, mode: str, other_arguments: list, goal: str = None, persona: str = None) -> str:
+    def build_prompt(
+        self,
+        topic: str,
+        context: str,
+        round_num: int,
+        mode: str,
+        other_arguments: list,
+        goal: str = None,
+        persona: str = None,
+    ) -> str:
         if len(context) > 12000:
             context = context[:6000] + "\n\n...[truncated]...\n\n" + context[-6000:]
 
@@ -112,11 +121,14 @@ Now give your argument for round {round_num}.
         return prompt
 
     @abstractmethod
-    async def argue(self, topic: str, context: str, round_num: int, mode: str, other_arguments: list) -> str:
+    async def argue(
+        self, topic: str, context: str, round_num: int, mode: str, other_arguments: list
+    ) -> str:
         pass
 
 
 # GPT AGENT
+
 
 def get_github_cli_token() -> str:
     """
@@ -150,7 +162,9 @@ class GPTAgent(BaseAgent):
         self.github_token = get_github_cli_token()
         self.client = CopilotClient(SubprocessConfig(github_token=self.github_token))
 
-    async def argue(self, topic: str, context: str, round_num: int, mode: str, other_arguments: list) -> str:
+    async def argue(
+        self, topic: str, context: str, round_num: int, mode: str, other_arguments: list
+    ) -> str:
         prompt = self.build_prompt(topic, context, round_num, mode, other_arguments)
         session = None
         try:
@@ -173,6 +187,7 @@ class GPTAgent(BaseAgent):
 
 # GROQ AGENT (Llama via Groq)
 
+
 class GroqAgent(BaseAgent):
     """
     Llama-3.3 debater using the Groq API.
@@ -184,7 +199,9 @@ class GroqAgent(BaseAgent):
             raise ValueError("GROQ_API_KEY is not set in your .env file.")
         self.client = Groq(api_key=GROQ_API_KEY, timeout=TIME_LIMIT, max_retries=0)
 
-    async def argue(self, topic: str, context: str, round_num: int, mode: str, other_arguments: list) -> str:
+    async def argue(
+        self, topic: str, context: str, round_num: int, mode: str, other_arguments: list
+    ) -> str:
         prompt = self.build_prompt(topic, context, round_num, mode, other_arguments)
         loop = asyncio.get_event_loop()
         response = await asyncio.wait_for(
@@ -194,7 +211,7 @@ class GroqAgent(BaseAgent):
                     model=GROQ_MODEL,
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=4096,
-                )
+                ),
             ),
             timeout=TIME_LIMIT,
         )
@@ -204,6 +221,7 @@ class GroqAgent(BaseAgent):
 
 
 # GEMINI AGENT
+
 
 class GeminiAgent(BaseAgent):
     """
@@ -216,7 +234,9 @@ class GeminiAgent(BaseAgent):
             raise ValueError("GOOGLE_API_KEY is not set in your .env file.")
         self.client = genai.Client(api_key=GOOGLE_API_KEY)
 
-    async def argue(self, topic: str, context: str, round_num: int, mode: str, other_arguments: list) -> str:
+    async def argue(
+        self, topic: str, context: str, round_num: int, mode: str, other_arguments: list
+    ) -> str:
         prompt = self.build_prompt(topic, context, round_num, mode, other_arguments)
         loop = asyncio.get_event_loop()
         response = await asyncio.wait_for(
@@ -225,7 +245,7 @@ class GeminiAgent(BaseAgent):
                 lambda: self.client.models.generate_content(
                     model=GEMINI_MODEL,
                     contents=prompt,
-                )
+                ),
             ),
             timeout=TIME_LIMIT,
         )
@@ -236,6 +256,7 @@ class GeminiAgent(BaseAgent):
 
 # KIMI AGENT
 
+
 class KimiAgent(BaseAgent):
     """
     Moonshot Kimi debater using OpenAI compatible endpoint.
@@ -245,9 +266,16 @@ class KimiAgent(BaseAgent):
         super().__init__("kimi")
         if not KIMI_API_KEY:
             raise ValueError("KIMI_API_KEY is not set in your .env file.")
-        self.client = OpenAI(api_key=KIMI_API_KEY, base_url="https://api.moonshot.cn/v1", timeout=TIME_LIMIT, max_retries=0)
+        self.client = OpenAI(
+            api_key=KIMI_API_KEY,
+            base_url="https://api.moonshot.cn/v1",
+            timeout=TIME_LIMIT,
+            max_retries=0,
+        )
 
-    async def argue(self, topic: str, context: str, round_num: int, mode: str, other_arguments: list) -> str:
+    async def argue(
+        self, topic: str, context: str, round_num: int, mode: str, other_arguments: list
+    ) -> str:
         prompt = self.build_prompt(topic, context, round_num, mode, other_arguments)
         loop = asyncio.get_event_loop()
         response = await asyncio.wait_for(
@@ -257,7 +285,7 @@ class KimiAgent(BaseAgent):
                     model=KIMI_MODEL,
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=4096,
-                )
+                ),
             ),
             timeout=TIME_LIMIT,
         )
@@ -268,6 +296,7 @@ class KimiAgent(BaseAgent):
 
 # DEEPSEEK AGENT
 
+
 class DeepSeekAgent(BaseAgent):
     """
     DeepSeek debater using OpenAI compatible endpoint.
@@ -277,9 +306,16 @@ class DeepSeekAgent(BaseAgent):
         super().__init__("deepseek")
         if not DEEPSEEK_API_KEY:
             raise ValueError("DEEPSEEK_API_KEY is not set in your .env file.")
-        self.client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url="https://api.deepseek.com/v1", timeout=TIME_LIMIT, max_retries=0)
+        self.client = OpenAI(
+            api_key=DEEPSEEK_API_KEY,
+            base_url="https://api.deepseek.com/v1",
+            timeout=TIME_LIMIT,
+            max_retries=0,
+        )
 
-    async def argue(self, topic: str, context: str, round_num: int, mode: str, other_arguments: list) -> str:
+    async def argue(
+        self, topic: str, context: str, round_num: int, mode: str, other_arguments: list
+    ) -> str:
         prompt = self.build_prompt(topic, context, round_num, mode, other_arguments)
         loop = asyncio.get_event_loop()
         response = await asyncio.wait_for(
@@ -289,7 +325,7 @@ class DeepSeekAgent(BaseAgent):
                     model=DEEPSEEK_MODEL,
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=4096,
-                )
+                ),
             ),
             timeout=TIME_LIMIT,
         )
@@ -300,6 +336,7 @@ class DeepSeekAgent(BaseAgent):
 
 # CLAUDE AGENT
 
+
 class ClaudeAgent(BaseAgent):
     """
     Claude debater using Anthropic SDK.
@@ -309,9 +346,13 @@ class ClaudeAgent(BaseAgent):
         super().__init__("claude")
         if not ANTHROPIC_API_KEY:
             raise ValueError("ANTHROPIC_API_KEY is not set in your .env file.")
-        self.client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY, timeout=TIME_LIMIT, max_retries=0)
+        self.client = anthropic.Anthropic(
+            api_key=ANTHROPIC_API_KEY, timeout=TIME_LIMIT, max_retries=0
+        )
 
-    async def argue(self, topic: str, context: str, round_num: int, mode: str, other_arguments: list) -> str:
+    async def argue(
+        self, topic: str, context: str, round_num: int, mode: str, other_arguments: list
+    ) -> str:
         prompt = self.build_prompt(topic, context, round_num, mode, other_arguments)
         loop = asyncio.get_event_loop()
         response = await asyncio.wait_for(
@@ -321,7 +362,7 @@ class ClaudeAgent(BaseAgent):
                     model=CLAUDE_MODEL,
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=4096,
-                )
+                ),
             ),
             timeout=TIME_LIMIT,
         )
@@ -331,6 +372,7 @@ class ClaudeAgent(BaseAgent):
 
 
 # FACTORY FUNCTION
+
 
 def get_agent(name: str) -> BaseAgent:
     """
