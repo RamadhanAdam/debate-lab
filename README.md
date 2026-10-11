@@ -10,7 +10,7 @@ Debate Lab is a multi-agent debate system where top-tier AI models argue about t
 
 ---
 
-## 🚀 What It Does
+## What It Does
 
 You provide context (research papers, codebases, business plans, or raw data) by dropping files into the UI or pasting a GitHub repository URL. The models read it and debate in three rounds:
 
@@ -22,7 +22,7 @@ You can also participate as a "Human" agent, injecting your own arguments into t
 
 ---
 
-## 🤖 Supported Models
+## Supported Models
 
 Debate Lab natively supports 6 leading LLMs via their respective APIs. You only need API keys for the ones you want to use.
 
@@ -39,7 +39,7 @@ Debate Lab natively supports 6 leading LLMs via their respective APIs. You only 
 
 ---
 
-## 💻 Installation & Quick Start
+## Installation & Quick Start
 
 **1. Clone and Install**
 \`\`\`bash
@@ -61,7 +61,7 @@ Open `http://127.0.0.1:8765` in your browser.
 
 ---
 
-## 🏗️ System Architecture
+## System Architecture
 
 Debate Lab uses a modular architecture:
 - **Frontend (`web/`)**: A modular Vue 3 application using native ES imports (`assets/js/app.js`, `api.js`, etc.) and a custom Glass UI CSS framework.
@@ -72,7 +72,7 @@ Debate Lab uses a modular architecture:
 
 ---
 
-## 🔌 Adding New Agents
+## Adding New Agents
 
 Debate Lab is highly extensible. To add a new model:
 
@@ -84,7 +84,7 @@ Debate Lab is highly extensible. To add a new model:
 
 ---
 
-## 🐳 Docker Deployment
+## Docker Deployment
 
 To deploy to a cloud provider like HuggingFace Spaces or AWS:
 
@@ -97,6 +97,6 @@ docker run -p 7860:7860 --env-file .env debate-lab
 
 ---
 
-## 📝 License
+## License
 
 This software is provided under a Commercial/Proprietary license. See `LICENSE` for more details.
